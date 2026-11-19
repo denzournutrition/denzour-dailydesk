@@ -1,0 +1,11 @@
+---
+deployment:
+  tasks:
+    # EDIT THIS LINE: your site's Document Root (cPanel > Domains), keep the trailing slash
+    - export DEPLOYPATH=/home/CPANELUSERNAME/reporting.denzuu.com/
+    # Copies code only. config.php, data/ and .htaccess on the server are never touched.
+    - /bin/mkdir -p $DEPLOYPATH/app $DEPLOYPATH/assets
+    - /bin/cp -R app/. $DEPLOYPATH/app/
+    - /bin/cp -R assets/. $DEPLOYPATH/assets/
+    - /bin/cp index.php google-callback.php VERSION $DEPLOYPATH
+    - /bin/cp README*.txt $DEPLOYPATH

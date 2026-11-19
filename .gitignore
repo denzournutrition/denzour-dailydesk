@@ -1,0 +1,7 @@
+config.php
+data/*.sqlite*
+data/uploads/
+data/backups/
+data/logos/
+data/.htaccess
+.htaccess
