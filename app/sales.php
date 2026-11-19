@@ -218,7 +218,7 @@ function xlsx_read(string $path): array
                 $col = 0;
                 foreach (str_split(preg_replace('/\d+/', '', (string)$c['r'])) as $ch) { $col = $col * 26 + (ord($ch) - 64); }
                 $col--;
-                if ($col < 0 || $col > 40) { continue; }
+                if ($col < 0 || $col > 800) { continue; }
                 $t = (string)$c['t'];
                 $val = '';
                 if ($t === 's') { $val = $ss[(int)$c->v] ?? ''; }

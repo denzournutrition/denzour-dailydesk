@@ -75,7 +75,7 @@ function ecom_platform_key(string $text): string
     $t = strtolower($text);
     if (preg_match('/blinkit|grofers|blink it/', $t)) { return 'blinkit'; }
     if (preg_match('/myntra/', $t)) { return 'myntra'; }
-    if (preg_match('/hugu/', $t)) { return 'hugulife'; }
+    if (preg_match('/hugu|hyugu|hyuga|hugh/', $t)) { return 'hugulife'; }
     if (preg_match('/1\s*mg|tata/', $t)) { return 'tata1mg'; }
     return '';
 }
@@ -110,6 +110,123 @@ function ecom_find_cols(array $header): array
     return $map;
 }
 
+
+/**
+ * "Management sheet" layout: platforms down column A, dates across the top, each date split into Sale / Spend.
+ * Month and date-range columns are skipped (they are not single days); only real days are imported.
+ * Returns null when the tab does not look like this layout.
+ */
+function ecom_tab_wide(array $tab, string $filename): ?array
+{
+    $rows = array_values($tab['rows']);
+    if (count($rows) < 3) { return null; }
+    $months = ['jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12];
+    // header = first row (within 6) that has 3+ date-like or "sale"/"spend" labels
+    $hi = null;
+    foreach (array_slice($rows, 0, 6, true) as $i => $r) {
+        $c = 0;
+        foreach ($r as $v) { if (is_string($v) ? preg_match('/sale|spend|\d/i', $v) : is_numeric($v)) { $c++; } }
+        if ($c >= 4) { $hi = $i; break; }
+    }
+    if ($hi === null) { return null; }
+    $h0 = $rows[$hi]; $h1 = $rows[$hi + 1] ?? [];
+    $n = max(count($h0), count($h1));
+    $cols = []; // j => [day, kind]
+    $daily = false; $ctx = null; $labelDay = null; $skip = false; $last = null; $bad = 0; $baseOnly = false;
+    // A heading is accepted if it follows the previous one (0-40 days later). If not, try the usual typos:
+    // day and month swapped (01/06 typed as 06/01) and a wrong year.
+    $accept = function (string $d) use (&$last, &$bad): ?string {
+        $fits = fn(string $x) => $last === null || ((strtotime($x) - strtotime($last)) / 86400 >= 0 && (strtotime($x) - strtotime($last)) / 86400 <= 40);
+        [$y, $mo, $dd] = array_map('intval', explode('-', $d));
+        $try = [$d];
+        if ($dd <= 12) { $try[] = sprintf('%04d-%02d-%02d', $y, $dd, $mo); }
+        if ($last !== null) {
+            $ly = (int)substr($last, 0, 4);
+            $try[] = sprintf('%04d-%02d-%02d', $ly, $mo, $dd);
+            if ($dd <= 12) { $try[] = sprintf('%04d-%02d-%02d', $ly, $dd, $mo); }
+            $try[] = sprintf('%04d-%02d-%02d', $ly + 1, $mo, $dd);
+        }
+        $best = null; $bd = 1e9;
+        foreach ($try as $x) {
+            if (!valid_date($x) || !$fits($x)) { continue; }
+            $df = $last === null ? 0 : (strtotime($x) - strtotime($last)) / 86400;
+            if ($df < $bd) { $bd = $df; $best = $x; }        // the closest date after the previous heading wins
+        }
+        if ($best === null) { $bad++; return null; }
+        $last = $best; return $best;
+    };
+    for ($j = 1; $j < $n; $j++) {
+        $a = $h0[$j] ?? null; $b = trim((string)($h1[$j] ?? ''));
+        $at = trim((string)$a);
+        if ($at !== '') {
+            $skip = false; $labelDay = null; $baseOnly = false;
+            if (preg_match('/^(\d{1,2})\s*[-–]\s*(\d{1,2})\s*([a-z]{3})/i', $at, $m)) {                // range "1-15 Nov"
+                $daily = true;
+                $mo = $months[strtolower($m[3])] ?? null;
+                if ($mo && $ctx) { $y = (int)substr($ctx, 0, 4); if ($mo < (int)substr($ctx, 5, 2) - 6) { $y++; } $ctx = sprintf('%04d-%02d-01', $y, $mo); }
+                $ed = $mo && $ctx ? sprintf('%s-%02d', substr($ctx, 0, 7), (int)$m[2]) : '';
+                if ($ed !== '' && valid_date($ed) && ($d2 = $accept($ed)) !== null) { $labelDay = $d2; $baseOnly = true; } else { $skip = true; }
+            } elseif (($d = s_date($a)) !== null) {
+                if (!$daily) { $skip = true; $ctx = $d; }                                              // month column
+                elseif (($d2 = $accept($d)) !== null) { $labelDay = $d2; $ctx = substr($d2, 0, 7) . '-01'; } else { $skip = true; }
+            } elseif ($daily && $ctx && preg_match('/^(\d{1,2})\s*([a-z]{3})?/i', $at, $m)) {         // "22 Sale" or "30 Jan"
+                $mo = !empty($m[2]) ? ($months[strtolower($m[2])] ?? null) : null;
+                $ym = $mo ? sprintf('%04d-%02d', (int)substr($ctx, 0, 4) + ($mo < (int)substr($ctx, 5, 2) - 6 ? 1 : 0), $mo) : substr($ctx, 0, 7);
+                $d = sprintf('%s-%02d', $ym, (int)$m[1]);
+                if (valid_date($d) && ($d2 = $accept($d)) !== null) { $labelDay = $d2; $ctx = substr($d2, 0, 7) . '-01'; } else { $skip = true; }
+            } else { $skip = true; }
+        }
+        $kindTxt = strtolower($b !== '' ? $b : $at);
+        $kind = str_contains($kindTxt, 'spend') ? 'spend' : (str_contains($kindTxt, 'sale') ? 'sales' : '');
+        if ($kind === '' && $at !== '' && $b === '' && $labelDay) { $kind = 'sales'; }
+        if (!$skip && $labelDay && $kind !== '') { $cols[$j] = [$labelDay, $kind, $baseOnly]; }
+    }
+    if (!$cols) { return null; }
+    // 1) read every figure: $ser[platform][kind][day] = [value, baselineOnly]
+    $ser = [];
+    foreach (array_slice($rows, $hi + 2) as $r) {
+        $pk = ecom_platform_key((string)($r[0] ?? ''));
+        if ($pk === '') { continue; }
+        foreach ($cols as $j => [$day, $kind, $base]) {
+            $raw = $r[$j] ?? null;
+            if ($raw === null || trim((string)$raw) === '' || trim((string)$raw) === '-') { continue; }
+            $ser[$pk][$kind][$day] = [s_amount($raw), $base];
+        }
+    }
+    // 2) management sheets usually keep month-to-date running totals. If a month's figures only ever go up,
+    //    turn them into daily amounts (today's total minus the previous total of the same month).
+    $agg = []; $cum = 0;
+    foreach ($ser as $pk => $kinds) {
+        foreach ($kinds as $kind => $days) {
+            ksort($days);
+            $byMonth = [];
+            foreach ($days as $d => $v) { $byMonth[substr($d, 0, 7)][$d] = $v; }
+            foreach ($byMonth as $mon => $pts) {
+                $vals = array_column($pts, 0);
+                $up = 0; $steps = max(0, count($vals) - 1);
+                for ($i = 1; $i < count($vals); $i++) { if ($vals[$i] >= $vals[$i - 1]) { $up++; } }
+                $isCum = $steps >= 3 && $up / $steps >= 0.8;
+                $prev = 0.0;
+                foreach ($pts as $d => [$v, $base]) {
+                    $val = $v;
+                    if ($isCum) { $val = $v >= $prev ? $v - $prev : $v; $prev = $v; }
+                    if ($base) { continue; }
+                    $k = $pk . '|' . $d;
+                    $agg[$k] = $agg[$k] ?? ['p' => $pk, 'day' => $d, 'sales' => 0.0, 'orders' => 0, 'units' => 0, 'spend' => 0.0, '_f' => []];
+                    $agg[$k][$kind] = round($val, 2);
+                    $agg[$k]['_f'][$kind] = true;
+                }
+                if ($isCum) { $cum++; }
+            }
+        }
+    }
+    if (!$agg) { return null; }
+    ksort($agg);
+    $out = [];
+    foreach ($agg as $a) { $a['_s'] = isset($a['_f']['sales']); $a['_sp'] = isset($a['_f']['spend']); unset($a['_f']); $out[] = $a; }
+    return ['name' => (string)$tab['name'], 'ok' => true, 'cols' => ['sales', 'spend'], 'platform' => '', 'rows' => $out, 'note' => 'Management sheet layout: ' . count($out) . ' platform-days' . ($cum ? ', running month totals converted to daily amounts' : '') . ($bad ? ', ' . $bad . ' column heading(s) with a wrong-looking date skipped' : '') . ' (month and range columns skipped).'];
+}
+
 /** One tab -> ['name','ok','cols','platform','rows'=>[ [p,day,sales,orders,units,spend], ... ]] */
 function ecom_tab(array $tab, string $filename): array
 {
@@ -120,7 +237,11 @@ function ecom_tab(array $tab, string $filename): array
         $m = ecom_find_cols($r);
         if (isset($m['date']) && (isset($m['sales']) || isset($m['spend']))) { $hi = $i; $map = $m; break; }
     }
-    if ($hi === null) { $res['note'] = 'No date with a sales or spend column found.'; return $res; }
+    if ($hi === null) {
+        $w = ecom_tab_wide($tab, $filename);
+        if ($w) { return $w; }
+        $res['note'] = 'No date with a sales or spend column found.'; return $res;
+    }
     $res['ok'] = true;
     $res['cols'] = array_values(array_filter(['sales', 'orders', 'units', 'spend'], fn($f) => isset($map[$f])));
     $agg = [];
@@ -183,7 +304,10 @@ function ecom_commit(int $uid, string $filename, array $tabs, array $chosen, arr
             $p = $r['p'] !== '' ? $r['p'] : $fallback;
             if (!isset(ECOM_PLATFORMS[$p])) { continue; }
             $vals = [];
-            foreach ($t['cols'] as $f) { $vals[$f] = $r[$f]; }
+            foreach ($t['cols'] as $f) {
+                if (isset($r['_s']) && (($f === 'sales' && !$r['_s']) || ($f === 'spend' && !$r['_sp']))) { continue; }
+                $vals[$f] = $r[$f];
+            }
             ecom_save_day($p, $r['day'], $vals, $uid, 'sheet');
             $n++;
         }

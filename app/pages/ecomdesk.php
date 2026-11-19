@@ -109,7 +109,7 @@ layout_head('E-commerce desk');
         $mixed = $t['ok'] && count(array_unique(array_filter(array_column($t['rows'], 'p')))) > 0 && count(array_filter(array_column($t['rows'], 'p'), fn($x) => $x === '')) === 0; ?>
       <tr class="<?= $t['ok'] ? '' : 'is-dim' ?>">
         <td><?php if ($t['ok']): ?><input type="checkbox" name="tabs[]" value="<?= $i ?>" checked aria-label="Import <?= h($t['name']) ?>"><?php endif; ?></td>
-        <td><strong><?= h($t['name']) ?></strong></td>
+        <td><strong><?= h($t['name']) ?></strong><?php if ($t['ok'] && !empty($t['note'])): ?><br><span class="muted tiny"><?= h($t['note']) ?></span><?php endif; ?></td>
         <td><?php if (!$t['ok']): ?><span class="muted"><?= h($t['note']) ?></span>
           <?php elseif ($mixed): ?><span class="chip chip--ok">From the Platform column</span>
           <?php else: ?><select name="plat[<?= $i ?>]" aria-label="Platform for <?= h($t['name']) ?>"><option value="">Choose…</option><?php foreach (ECOM_PLATFORMS as $k => $p): ?><option value="<?= h($k) ?>" <?= $t['platform'] === $k ? 'selected' : '' ?>><?= h($p[0]) ?></option><?php endforeach; ?></select><?php endif; ?></td>
