@@ -1,8 +1,8 @@
 ---
 deployment:
   tasks:
-    # EDIT THIS LINE: your site's Document Root (cPanel > Domains), keep the trailing slash
-    - export DEPLOYPATH=/home/CPANELUSERNAME/reporting.denzuu.com/
+    # Site folder for reporting.denzuu.com
+    - export DEPLOYPATH=/home/denzour1/reporting.denzuu.com/
     # Copies code only. config.php, data/ and .htaccess on the server are never touched.
     - /bin/mkdir -p $DEPLOYPATH/app $DEPLOYPATH/assets
     - /bin/cp -R app/. $DEPLOYPATH/app/
