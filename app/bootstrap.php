@@ -8,6 +8,7 @@ mb_internal_encoding('UTF-8');
 require __DIR__ . '/sales.php';
 require __DIR__ . '/attendance.php';
 require __DIR__ . '/ecom.php';
+require __DIR__ . '/gsync.php';
 
 function cfg(string $k, $d = null)
 {
@@ -129,6 +130,7 @@ function migrate(PDO $pdo): void
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts ON login_attempts(ident, at)');
     sales_migrate($pdo);
     ecom_migrate($pdo);
+    gsync_migrate($pdo);
     att_migrate($pdo);
 }
 
@@ -389,7 +391,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $nav[] = ['Workspace', $work];
         }
         if ($u['role'] === 'admin') {
-            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['holidays', 'Holidays', 'calendar'], ['update', 'Update', 'upload']]];
+            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['update', 'Update', 'upload']]];
         }
     }
     ?><!doctype html>

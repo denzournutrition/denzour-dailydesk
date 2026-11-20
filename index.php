@@ -15,6 +15,8 @@ $routes = [
     'allreports'=> ['file' => 'allreports','roles' => ['admin'],                  'auth' => true],
     'people'    => ['file' => 'people',    'roles' => ['admin'],                  'auth' => true],
     'holidays'  => ['file' => 'holidays',  'roles' => ['admin'],                  'auth' => true],
+    'gsync'     => ['file' => 'gsync',     'roles' => ['admin'],                  'auth' => true],
+    'gsynccron' => ['file' => 'gsynccron', 'roles' => null,                       'auth' => false],
     'update'    => ['file' => 'update',    'roles' => ['admin'],                  'auth' => true],
     'ecomdesk'  => ['file' => 'ecomdesk',  'roles' => ['employee', 'admin'],      'auth' => true],
     'ecomdash'  => ['file' => 'ecomdash',  'roles' => null, 'cap' => 'dashboard', 'auth' => true],
@@ -71,4 +73,5 @@ if ($u && $u['role'] === 'employee' && $route['auth']) {
     }
 }
 
+if ($u && $route['auth'] && $_SERVER['REQUEST_METHOD'] === 'GET' && $p !== 'gsync') { gsync_auto(); }
 require __DIR__ . '/app/pages/' . $route['file'] . '.php';
