@@ -100,7 +100,7 @@ layout_head('People');
 <?php foreach ($users as $u): ?>
   <details class="item person <?= $u['active'] ? '' : 'is-off' ?>">
     <summary>
-      <span class="person__n"><strong><?= h($u['name']) ?></strong><small><?= h($u['email']) ?></small></span>
+      <?= avatar_html($u, 34) ?><span class="person__n"><strong><?= h($u['name']) ?></strong><small><?= h($u['email']) ?></small></span>
       <span class="chip"><?= h($roles[$u['role']]) ?></span>
       <?php if (($u['designation'] === 'Inside Sales' || !empty($u['sales_access'])) && $u['role'] === 'employee'): ?><span class="chip chip--ok">Sales desk</span><?php endif; ?>
       <?php if (($u['designation'] === 'E-commerce Specialist' || !empty($u['ecom_access'])) && $u['role'] === 'employee'): ?><span class="chip chip--ok">E-commerce desk</span><?php endif; ?>
@@ -110,6 +110,7 @@ layout_head('People');
     </summary>
     <form method="post" class="item__body formrow">
       <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+      <a class="btn btn--ghost btn--sm" href="<?= h(url('profile', ['id' => (int)$u['id']])) ?>">View / edit profile and photo</a>
       <label class="field grow"><span>Name</span><input name="name" value="<?= h($u['name']) ?>" required maxlength="80"></label>
       <label class="field grow"><span>Email</span><input type="email" name="email" value="<?= h($u['email']) ?>" required></label>
       <label class="field"><span>Role</span><select name="role"><?php foreach ($roles as $k => $l): ?><option value="<?= $k ?>" <?= $u['role'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select></label>

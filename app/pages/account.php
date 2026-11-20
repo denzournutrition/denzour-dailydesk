@@ -33,6 +33,7 @@ layout_head('Account');
 ?>
 <div class="card card--narrow">
   <h1>Your account</h1>
+  <p><a class="btn btn--ghost btn--sm" href="<?= h(url('profile')) ?>">Edit my profile and photo</a></p>
   <dl class="kv">
     <div><dt>Name</dt><dd><?= h($u['name']) ?></dd></div>
     <div><dt>Email</dt><dd><?= h($u['email']) ?></dd></div>

@@ -9,6 +9,7 @@ require __DIR__ . '/sales.php';
 require __DIR__ . '/attendance.php';
 require __DIR__ . '/ecom.php';
 require __DIR__ . '/gsync.php';
+require __DIR__ . '/profile.php';
 
 function cfg(string $k, $d = null)
 {
@@ -131,6 +132,7 @@ function migrate(PDO $pdo): void
     sales_migrate($pdo);
     ecom_migrate($pdo);
     gsync_migrate($pdo);
+    profile_migrate($pdo);
     att_migrate($pdo);
 }
 
@@ -387,6 +389,9 @@ function layout_head(string $title, string $bodyClass = ''): void
             $work[] = ['attboard', 'Attendance', 'check'];
             $work[] = ['exports', 'Downloads', 'download'];
         }
+        if (in_array($u['role'], ['admin', 'ceo'], true)) {
+            $work[] = ['team', 'Team', 'users'];
+        }
         if ($work) {
             $nav[] = ['Workspace', $work];
         }
@@ -420,8 +425,8 @@ function layout_head(string $title, string $bodyClass = ''): void
   </nav>
   <div class="side__foot">
     <div class="me">
-      <span class="avatar" aria-hidden="true"><?= h(initials($u['name'])) ?></span>
-      <span class="me__t"><a href="<?= h(url('account')) ?>" title="Account"><?= h($u['name']) ?></a><small><?= h($u['role'] === 'ceo' ? 'CEO (view only)' : ucfirst($u['role'])) ?></small></span>
+      <?= avatar_html($u, 38) ?>
+      <span class="me__t"><a href="<?= h(url('profile')) ?>" title="My profile"><?= h($u['name']) ?></a><small><?= h($u['role'] === 'ceo' ? 'CEO (view only)' : ucfirst($u['role'])) ?></small></span>
     </div>
     <form class="logout" method="post" action="<?= h(url('logout')) ?>"><?= csrf_field() ?><button class="btn btn--ghost btn--sm" type="submit"><?= icon('logout') ?>Log out</button></form>
   </div>
@@ -432,7 +437,7 @@ function layout_head(string $title, string $bodyClass = ''): void
   <button class="iconbtn" type="button" data-menu aria-label="Open menu"><?= icon('menu') ?></button>
   <span class="top__sp"></span>
   <span class="pill pill--date"><?= icon('calendar') ?><?= h(fmt_date(today(), true)) ?></span>
-  <a class="pill" href="<?= h(url('account')) ?>"><span class="avatar" style="width:24px;height:24px;font-size:.62rem" aria-hidden="true"><?= h(initials($u['name'])) ?></span><span class="pill__n"><?= h($u['name']) ?></span></a>
+  <a class="pill" href="<?= h(url('profile')) ?>"><?= avatar_html($u, 24) ?><span class="pill__n"><?= h($u['name']) ?></span></a>
 </header>
 <?php endif; ?>
 <main class="wrap<?= $u ? '' : ' wrap--auth' ?>">

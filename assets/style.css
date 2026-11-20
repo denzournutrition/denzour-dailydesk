@@ -293,3 +293,23 @@ body.login{background:#fff}
 @media(max-width:600px){.platcard__n b{font-size:1.1rem}.tbl--entry .num{width:96px}}
 .steps{margin:0 0 14px 20px;padding:0;display:grid;gap:6px}
 .card .bad{color:var(--bad)}
+
+/* ---------- profiles ---------- */
+.avatar--img{object-fit:cover;background:var(--soft);display:block}
+.prof{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:18px;align-items:start}
+.prof__id{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
+.prof__id h2{margin:12px 0 0}.prof__id p{margin:0}
+.prof__bio{margin:10px 0 4px!important;line-height:1.5;color:var(--ink)}
+.prof__id .kv{width:100%;text-align:left;margin-top:14px}
+.prof__r{min-width:0}.prof__r .kpis{margin-bottom:18px}
+.team{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.team__c{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;text-decoration:none;color:var(--ink);margin:0;transition:box-shadow .15s,transform .15s}
+.team__c:hover{box-shadow:0 6px 18px rgba(15,23,42,.1);transform:translateY(-1px)}
+.team__c .avatar{margin-bottom:8px}
+@media(max-width:900px){.prof{grid-template-columns:1fr}}
+@media(min-width:900px){.kpis.kpis--3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.prof__id .kv>div{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:9px 0;border-top:1px solid var(--line)}
+.prof__id .kv>div:first-child{border-top:0}
+.prof__id .kv dt{color:var(--mute);font-size:.82rem;flex:none}
+.prof__id .kv dd{margin:0;text-align:right;min-width:0;overflow-wrap:anywhere}
+.prof__r .kpi__v{font-size:1.5rem}

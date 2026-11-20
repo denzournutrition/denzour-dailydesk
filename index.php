@@ -28,6 +28,9 @@ $routes = [
     'attendance'=> ['file' => 'attendance','roles' => ['employee'],                   'auth' => true],
     'attboard'  => ['file' => 'attboard',  'roles' => null, 'cap' => 'dashboard', 'auth' => true],
     'exports'   => ['file' => 'exports',   'roles' => null, 'cap' => 'dashboard', 'auth' => true],
+    'profile'   => ['file' => 'profile',   'roles' => null,                       'auth' => true],
+    'team'      => ['file' => 'team',      'roles' => ['admin', 'ceo'],           'auth' => true],
+    'avatar'    => ['file' => 'avatar',    'roles' => null,                       'auth' => true],
     'account'   => ['file' => 'account',   'roles' => null,                       'auth' => true],
 ];
 
@@ -69,7 +72,7 @@ if ($route['auth']) {
 if ($u && $u['role'] === 'employee' && $route['auth']) {
     att_touch($u);
     // A late start or a missed day must be explained before carrying on.
-    if (!in_array($p, ['attendance', 'account', 'ecomlogo'], true) && att_gate_open($u)) {
+    if (!in_array($p, ['attendance', 'account', 'ecomlogo', 'avatar', 'profile'], true) && att_gate_open($u)) {
         redirect(url('attendance'));
     }
 }
