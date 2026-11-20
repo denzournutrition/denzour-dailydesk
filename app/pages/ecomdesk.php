@@ -173,4 +173,5 @@ layout_head('E-commerce desk');
 <section class="card"><div class="card__h"><h2>My uploads</h2></div>
   <ul class="plain"><?php foreach ($ups as $u): ?><li><strong><?= h($u['filename']) ?></strong> <span class="muted tiny">· <?= h(date('j M, g:i a', strtotime($u['created_at']))) ?> · <?= (int)$u['rows_in'] ?> day-rows</span></li><?php endforeach; ?></ul></section>
 <?php endif; ?>
+<?php gsync_card('ecom', $uid, 'ecomdesk'); ?>
 <?php layout_foot();

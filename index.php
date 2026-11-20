@@ -16,6 +16,7 @@ $routes = [
     'people'    => ['file' => 'people',    'roles' => ['admin'],                  'auth' => true],
     'holidays'  => ['file' => 'holidays',  'roles' => ['admin'],                  'auth' => true],
     'gsync'     => ['file' => 'gsync',     'roles' => ['admin'],                  'auth' => true],
+    'mysheet'   => ['file' => 'mysheet',   'roles' => ['employee', 'admin'],      'auth' => true],
     'gsynccron' => ['file' => 'gsynccron', 'roles' => null,                       'auth' => false],
     'update'    => ['file' => 'update',    'roles' => ['admin'],                  'auth' => true],
     'ecomdesk'  => ['file' => 'ecomdesk',  'roles' => ['employee', 'admin'],      'auth' => true],

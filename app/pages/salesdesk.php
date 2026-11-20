@@ -303,4 +303,5 @@ layout_head('Sales desk');
     <?php endforeach; endif; ?>
   </section>
 </div>
+<?php gsync_card('sales', $uid, 'salesdesk'); ?>
 <?php layout_foot();
