@@ -355,17 +355,20 @@ function export_data(string $key, string $from, string $to): array
         case 'sales_all':
             $rows = [];
             foreach ($q('SELECT * FROM ecom_daily WHERE day BETWEEN ? AND ?', [$from, $to]) as $r) {
-                $rows[] = [$r['day'], 'Online', 'Marketplace', ECOM_PLATFORMS[$r['platform']][0] ?? $r['platform'], $r['sales'], $r['orders'], $r['spend'], 'Yes', ''];
+                $rows[] = [$r['day'], 'Online', 'Marketplace', ECOM_PLATFORMS[$r['platform']][0] ?? $r['platform'], $r['sales'], $r['orders'], $r['spend'], '', '', ''];
             }
-            $web = (int)$q('SELECT COUNT(*) c FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.web = 1 AND d.sales > 0 AND d.day BETWEEN ? AND ?', [$from, $to])[0]['c'] > 0;
-            foreach ($q('SELECT d.*, c.name, c.kind FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE d.day BETWEEN ? AND ?', [$from, $to]) as $r) {
-                $rows[] = [$r['day'], $r['kind'] === 'online' ? 'Online' : 'Offline', $r['kind'] === 'online' ? 'Website' : 'Offline', $r['name'], $r['sales'], $r['orders'], '', 'Yes', $r['note']];
+            $webDays = [];
+            foreach ($q('SELECT d.*, c.name, c.kind, c.web FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE d.day BETWEEN ? AND ?', [$from, $to]) as $r) {
+                if ($r['web'] && $r['sales'] > 0) { $webDays[$r['day']] = true; }
+                $rows[] = [$r['day'], $r['kind'] === 'online' ? 'Online' : 'Offline', $r['web'] ? 'Shopify' : ($r['kind'] === 'online' ? 'Other online' : 'Offline'), $r['name'], $r['sales'], $r['orders'], '',
+                    $r['web'] ? $r['meta'] : '', $r['web'] ? $r['infl'] : '', $r['note']];
             }
             foreach ($q('SELECT order_date d, SUM(amount) a, COUNT(*) n FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date', [$from, $to]) as $r) {
-                $rows[] = [$r['d'], 'Online', 'Website', 'Inside Sales (call team)', $r['a'], $r['n'], '', $web ? 'No (part of website total)' : 'Yes', ''];
+                if (isset($webDays[$r['d']])) { $rows[] = [$r['d'], 'Online', 'Shopify (part of Shopify total)', 'Inside Sales (call team)', $r['a'], $r['n'], '', '', '', 'Already inside the Shopify total, not added again']; }
+                else { $rows[] = [$r['d'], 'Online', 'Shopify', 'Inside Sales (call team), used as Shopify until the day total is entered', $r['a'], $r['n'], '', '', '', '']; }
             }
             usort($rows, fn($a, $b) => [$a[0], $a[1], $a[3]] <=> [$b[0], $b[1], $b[3]]);
-            return [$name, ['Date', 'Type', 'Group', 'Platform / channel', 'Sales', 'Orders', 'Ad spend', 'Counted in total', 'Note'], $rows];
+            return [$name, ['Date', 'Type', 'Group', 'Platform / channel', 'Sales', 'Orders', 'Ad spend', 'Shopify: from Meta ads', 'Shopify: from influencer codes', 'Note'], $rows];
         case 'tasks_monthly':
             $rows = [];
             $m = substr($from, 0, 7);

@@ -10,13 +10,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cid = (int)($_POST['channel'] ?? 0); $day = (string)($_POST['day'] ?? '');
         $sales = (float)str_replace([',', '₹', ' '], '', (string)($_POST['sales'] ?? '0'));
         $orders = max(0, (int)($_POST['orders'] ?? 0));
+        $num = fn(string $k) => max(0.0, (float)str_replace([',', '₹', ' '], '', (string)($_POST[$k] ?? '0')));
+        $ok = $pdo->prepare('SELECT web FROM sales_channels WHERE id = ? AND active = 1'); $ok->execute([$cid]);
+        $isWeb = $ok->fetchColumn();
+        $meta = $isWeb ? $num('meta') : 0.0; $infl = $isWeb ? $num('infl') : 0.0;
         $ok = $pdo->prepare('SELECT 1 FROM sales_channels WHERE id = ? AND active = 1'); $ok->execute([$cid]);
         if (!$ok->fetchColumn() || !valid_date($day) || $day > $today) { flash('error', 'Choose a channel and a date that is not in the future.'); }
         elseif ($sales < 0 || $sales > 100000000) { flash('error', 'Enter a sales amount between 0 and 10 crore.'); }
+        elseif ($meta + $infl > $sales + 0.5) { flash('error', 'Meta ads plus influencer codes cannot be more than the total Shopify sales.'); }
         else {
-            $pdo->prepare('INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) VALUES (?,?,?,?,?,?,?)
-                ON CONFLICT(channel_id, day) DO UPDATE SET sales=excluded.sales, orders=excluded.orders, user_id=excluded.user_id, note=excluded.note, updated_at=excluded.updated_at')
-                ->execute([$cid, $day, $sales, $orders, (int)$me['id'], mb_substr(trim((string)($_POST['note'] ?? '')), 0, 120), date('Y-m-d H:i:s')]);
+            $pdo->prepare('INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at, meta, infl) VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(channel_id, day) DO UPDATE SET sales=excluded.sales, orders=excluded.orders, user_id=excluded.user_id, note=excluded.note, updated_at=excluded.updated_at, meta=excluded.meta, infl=excluded.infl')
+                ->execute([$cid, $day, $sales, $orders, (int)$me['id'], mb_substr(trim((string)($_POST['note'] ?? '')), 0, 120), date('Y-m-d H:i:s'), $meta, $infl]);
             flash('ok', 'Saved ' . inr($sales) . ' for ' . fmt_date($day) . '.');
         }
     } elseif ($act === 'delrow' && $isAdmin) {
@@ -52,10 +57,12 @@ layout_head('Website and offline sales');
     <label class="field"><span>Date</span><input type="date" name="day" value="<?= h(add_days($today, -1)) ?>" max="<?= h($today) ?>" required></label>
     <label class="field"><span>Sales (₹)</span><input name="sales" inputmode="decimal" required placeholder="e.g. 48500"></label>
     <label class="field"><span>Orders</span><input name="orders" inputmode="numeric" value="0"></label>
+    <label class="field"><span>Shopify only: from Meta ads (₹)</span><input name="meta" inputmode="decimal" placeholder="optional"></label>
+    <label class="field"><span>Shopify only: from influencer codes (₹)</span><input name="infl" inputmode="decimal" placeholder="optional"></label>
     <label class="field grow"><span>Note <em>(optional)</em></span><input name="note" maxlength="120" placeholder="e.g. 2 new stockists in Pune"></label>
     <button class="btn" type="submit">Save</button>
   </form>
-  <p class="muted tiny" style="margin-top:10px">Saving the same channel and date again replaces the earlier number. Website sales here are the full website total: Inside Sales is then shown as "of which" and not added twice.</p>
+  <p class="muted tiny" style="margin-top:10px">Saving the same channel and date again replaces the earlier number. For Shopify, enter the full website total for the day. The CEO page splits it into Meta ads, influencer codes, Inside Sales (taken from the sales sheets) and others (the rest).</p>
 </section>
 
 <?php if ($isAdmin): ?>
@@ -77,7 +84,7 @@ layout_head('Website and offline sales');
   <?php if (!$recent): ?><p class="muted">Nothing entered yet.</p><?php else: ?>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Channel</th><th class="r">Sales</th><th class="r">Orders</th><th>Entered by</th><th></th></tr></thead><tbody>
   <?php foreach ($recent as $r): ?>
-    <tr><td><?= h(fmt_date($r['day'])) ?></td><td><?= h($r['name']) ?><?= $r['note'] !== '' ? '<br><span class="muted tiny">' . h($r['note']) . '</span>' : '' ?></td><td class="r"><?= h(inr((float)$r['sales'])) ?></td><td class="r"><?= (int)$r['orders'] ?></td><td><?= h($r['who'] ?? '') ?></td>
+    <tr><td><?= h(fmt_date($r['day'])) ?></td><td><?= h($r['name']) ?><?= $r['note'] !== '' ? '<br><span class="muted tiny">' . h($r['note']) . '</span>' : '' ?></td><td class="r"><?= h(inr((float)$r['sales'])) ?><?= ($r['meta'] + $r['infl']) > 0 ? '<br><span class="muted tiny">Meta ' . h(inr((float)$r['meta'])) . ' · Influencer ' . h(inr((float)$r['infl'])) . '</span>' : '' ?></td><td class="r"><?= (int)$r['orders'] ?></td><td><?= h($r['who'] ?? '') ?></td>
       <td><?php if ($isAdmin): ?><form method="post"><?= $csrf ?><input type="hidden" name="action" value="delrow"><input type="hidden" name="channel" value="<?= (int)$r['channel_id'] ?>"><input type="hidden" name="day" value="<?= h($r['day']) ?>"><button class="btn btn--danger btn--sm" type="submit" data-confirm="Remove this entry?">Remove</button></form><?php endif; ?></td></tr>
   <?php endforeach; ?></tbody></table></div>
   <?php endif; ?>

@@ -73,18 +73,28 @@ layout_head('Sales overview');
     <p class="muted">No offline sales have been entered for this month. <?php if (can_enter_channels($me)): ?><a href="<?= h(url('channels')) ?>">Add offline sales</a><?php else: ?>Ask the admin or the sales team to add them under "Other sales".<?php endif; ?></p>
   <?php endif; ?>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Share</th><th class="r">Orders</th><?php if ($kind === 'online'): ?><th class="r hm">Ad spend</th><th class="r hm">ROAS</th><?php endif; ?><th class="r">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?></th><th class="r hm">Last data</th></tr></thead><tbody>
-  <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; ?>
-    <tr class="<?= $r['of'] ? 'is-dim' : '' ?>">
-      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : h($r['label']) . ($r['of'] ? ' <span class="muted tiny">(of which, not added again)</span>' : '') ?></td>
+  <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; $isSh = $r['key'] === 'shopify'; ?>
+    <tr<?= $isSh ? ' style="background:var(--soft)"' : '' ?>>
+      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?></td>
       <td class="r"><strong><?= h(inr($r['sales'])) ?></strong></td>
-      <td class="r"><?= $r['of'] ? '–' : $share($r['sales'], $sub) . '%' ?></td>
+      <td class="r"><?= $share($r['sales'], $sub) ?>%</td>
       <td class="r"><?= number_format($r['orders']) ?></td>
       <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas($r['sales'], $r['spend'])) : '–' ?></td><?php endif; ?>
       <td class="r"><?= $chg($r['sales'], (float)$o) ?: '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>
+    <?php if ($isSh): foreach ($r['subs'] as $sr): ?>
+    <tr>
+      <td style="padding-left:34px"><span class="muted">↳</span> <?= h($sr['label']) ?></td>
+      <td class="r"><?= $sr['sales'] > 0 ? h(inr($sr['sales'])) : '<span class="muted">–</span>' ?></td>
+      <td class="r muted"><?= $r['sales'] > 0 && $sr['sales'] > 0 ? $share($sr['sales'], $r['sales']) . '% of Shopify' : '–' ?></td>
+      <td class="r"><?= $sr['orders'] !== null ? number_format($sr['orders']) : '–' ?></td>
+      <?php if ($kind === 'online'): ?><td class="r hm">–</td><td class="r hm">–</td><?php endif; ?>
+      <td class="r">–</td><td class="r hm">–</td>
+    </tr>
+    <?php endforeach; endif; ?>
   <?php endforeach; ?></tbody></table></div>
-  <?php if ($kind === 'online' && !$cur['web_entered']): ?><p class="muted tiny" style="margin-top:10px">Website sales are taken from Inside Sales orders until website totals are added under "Other sales".</p><?php endif; ?>
+  <?php if ($kind === 'online' && !$cur['web_entered']): ?><p class="muted tiny" style="margin-top:10px">Shopify is showing Inside Sales orders only. Add the daily Shopify total, with Meta and influencer-code sales, under "Other sales" to see the full split.</p><?php endif; ?>
 </section>
 <?php endforeach; ?>
 

@@ -22,10 +22,15 @@ function channels_migrate(PDO $pdo): void
         updated_at TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (channel_id, day)
     )");
+    $cols = array_column($pdo->query('PRAGMA table_info(channel_daily)')->fetchAll(), 'name');
+    foreach (['meta', 'infl'] as $c) {
+        if (!in_array($c, $cols, true)) { $pdo->exec("ALTER TABLE channel_daily ADD COLUMN $c REAL NOT NULL DEFAULT 0"); }
+    }
+    $pdo->exec("UPDATE sales_channels SET name = 'Shopify (website)' WHERE web = 1 AND name LIKE 'Website%'");
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_chd_day ON channel_daily(day)');
     if ((int)$pdo->query('SELECT COUNT(*) FROM sales_channels')->fetchColumn() === 0) {
         $ins = $pdo->prepare('INSERT INTO sales_channels (name, kind, web) VALUES (?,?,?)');
-        $ins->execute(['Website (denzournutrition.com)', 'online', 1]);
+        $ins->execute(['Shopify (website)', 'online', 1]);
         $ins->execute(['Offline: gyms and supplement stores', 'offline', 0]);
     }
 }
@@ -43,8 +48,9 @@ function can_enter_channels(?array $u = null): bool
 
 /**
  * Sales for every platform between two dates.
- * Online = marketplaces + website. Inside Sales orders are website orders, so they are an "of which" line
- * whenever website sales are entered, and are counted as the website only when they are not.
+ * Online = Shopify (website) + marketplaces + any other online channel.
+ * Shopify is the website total entered under "Other sales"; until it is entered, Inside Sales orders stand in for it.
+ * Shopify is split into Meta ads, influencer codes, Inside Sales and others (the rest).
  */
 function ceo_sales(string $from, string $to): array
 {
@@ -56,27 +62,42 @@ function ceo_sales(string $from, string $to): array
     foreach (ECOM_PLATFORMS as $k => $p) {
         $r = $eco[$k] ?? null;
         $rows[] = ['key' => 'p:' . $k, 'label' => $p[0], 'group' => 'Marketplace', 'kind' => 'online', 'sales' => (float)($r['s'] ?? 0), 'orders' => (int)($r['o'] ?? 0),
-            'spend' => (float)($r['sp'] ?? 0), 'days' => (int)($r['n'] ?? 0), 'last' => $r['last'] ?? null, 'of' => false, 'platform' => $k];
+            'spend' => (float)($r['sp'] ?? 0), 'days' => (int)($r['n'] ?? 0), 'last' => $r['last'] ?? null, 'platform' => $k];
     }
-    $webEntered = false;
-    foreach ($q('SELECT c.id, c.name, c.kind, c.web, SUM(d.sales) s, SUM(d.orders) o, COUNT(d.day) n, MAX(d.day) last FROM sales_channels c LEFT JOIN channel_daily d ON d.channel_id = c.id AND d.day BETWEEN ? AND ? WHERE c.active = 1 GROUP BY c.id ORDER BY c.kind DESC, c.name', [$from, $to]) as $r) {
-        if ($r['web'] && (float)$r['s'] > 0) { $webEntered = true; }
-        $rows[] = ['key' => 'c:' . $r['id'], 'label' => $r['name'], 'group' => $r['kind'] === 'online' ? 'Website' : 'Offline', 'kind' => $r['kind'], 'sales' => (float)$r['s'], 'orders' => (int)$r['o'],
-            'spend' => 0.0, 'days' => (int)$r['n'], 'last' => $r['last'], 'of' => false, 'platform' => ''];
+    $web = ['s' => 0.0, 'o' => 0, 'meta' => 0.0, 'infl' => 0.0, 'last' => null];
+    foreach ($q('SELECT c.id, c.name, c.kind, c.web, SUM(d.sales) s, SUM(d.orders) o, SUM(d.meta) meta, SUM(d.infl) infl, COUNT(d.day) n, MAX(d.day) last FROM sales_channels c LEFT JOIN channel_daily d ON d.channel_id = c.id AND d.day BETWEEN ? AND ? WHERE c.active = 1 GROUP BY c.id ORDER BY c.kind DESC, c.name', [$from, $to]) as $r) {
+        if ($r['web']) {
+            $web['s'] += (float)$r['s']; $web['o'] += (int)$r['o']; $web['meta'] += (float)$r['meta']; $web['infl'] += (float)$r['infl'];
+            if ($r['last'] && ($web['last'] === null || $r['last'] > $web['last'])) { $web['last'] = $r['last']; }
+            continue;
+        }
+        $rows[] = ['key' => 'c:' . $r['id'], 'label' => $r['name'], 'group' => $r['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $r['kind'], 'sales' => (float)$r['s'], 'orders' => (int)$r['o'],
+            'spend' => 0.0, 'days' => (int)$r['n'], 'last' => $r['last'], 'platform' => ''];
     }
-    $in = $q('SELECT SUM(amount) s, COUNT(*) o, COUNT(DISTINCT order_date) n, MAX(order_date) last FROM sales_orders WHERE order_date BETWEEN ? AND ?', [$from, $to])[0];
-    $rows[] = ['key' => 'inside', 'label' => 'Inside Sales (call team)', 'group' => 'Website', 'kind' => 'online', 'sales' => (float)$in['s'], 'orders' => (int)$in['o'], 'spend' => 0.0,
-        'days' => (int)$in['n'], 'last' => $in['last'], 'of' => $webEntered, 'platform' => ''];
+    $in = $q('SELECT SUM(amount) s, COUNT(*) o, MAX(order_date) last FROM sales_orders WHERE order_date BETWEEN ? AND ?', [$from, $to])[0];
+    $names = array_column($q('SELECT DISTINCT u.name FROM sales_orders o JOIN users u ON u.id = o.user_id WHERE o.order_date BETWEEN ? AND ? ORDER BY u.name', [$from, $to]), 'name');
+    $inside = (float)$in['s'];
+    $entered = $web['s'] > 0;
+    $shTotal = $entered ? $web['s'] : $inside;
+    $others = $entered ? max(0.0, $web['s'] - $web['meta'] - $web['infl'] - $inside) : 0.0;
+    $shopify = ['key' => 'shopify', 'label' => 'Shopify (website)', 'group' => 'Shopify', 'kind' => 'online', 'sales' => $shTotal, 'orders' => $entered ? $web['o'] : (int)$in['o'],
+        'spend' => 0.0, 'last' => $entered ? $web['last'] : $in['last'], 'platform' => '', 'entered' => $entered,
+        'subs' => [
+            ['key' => 'sub:meta', 'label' => 'From Meta ads', 'sales' => $web['meta'], 'orders' => null],
+            ['key' => 'sub:infl', 'label' => 'From influencer codes', 'sales' => $web['infl'], 'orders' => null],
+            ['key' => 'sub:inside', 'label' => 'From Inside Sales' . ($names ? ' (' . implode(', ', $names) . ')' : ''), 'sales' => $inside, 'orders' => (int)$in['o']],
+            ['key' => 'sub:others', 'label' => 'Others (rest of Shopify)', 'sales' => $others, 'orders' => null],
+        ]];
+    array_unshift($rows, $shopify);
     $tot = ['online' => 0.0, 'offline' => 0.0, 'orders' => 0, 'spend' => 0.0, 'mp_sales' => 0.0];
     foreach ($rows as $r) {
-        if ($r['of']) { continue; }
         $tot[$r['kind']] += $r['sales'];
         $tot['orders'] += $r['orders'];
         $tot['spend'] += $r['spend'];
         if ($r['group'] === 'Marketplace') { $tot['mp_sales'] += $r['sales']; }
     }
     $tot['all'] = $tot['online'] + $tot['offline'];
-    return ['rows' => $rows, 'tot' => $tot, 'web_entered' => $webEntered];
+    return ['rows' => $rows, 'tot' => $tot, 'web_entered' => $entered];
 }
 
 /** Per-day online and offline totals for a date range (same counting rules as ceo_sales). */
