@@ -288,8 +288,10 @@ function export_datasets(): array
         'sales_orders' => ['Sales orders', 'Every order imported from the sales sheets.'],
         'sales_calls' => ['Sales calls', 'Every call row imported, with remark and connected flag.'],
         'sales_minutes' => ['Call minutes', 'Daily call minutes typed by each person.'],
+        'sales_all' => ['Sales, all platforms (online and offline)', 'Every day and platform: marketplaces, website, Inside Sales and offline channels, with sales, orders and ad spend.'],
+        'tasks_monthly' => ['Monthly task summary per person', 'Days reported, leave, tasks, done, blocked and hours for each person and month.'],
         'reports' => ['Daily work reports and tasks', 'All tasks with hours, category and status.'],
-        'ecom_daily' => ['E-commerce daily sales and ad spend', 'Blinkit, Myntra, HUGU Life and Tata 1mg: sales, orders, units, ad spend, ROAS.'],
+        'ecom_daily' => ['E-commerce daily sales and ad spend', 'Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon and Flipkart: sales, orders, units, ad spend, ROAS.'],
     ];
 }
 
@@ -350,6 +352,31 @@ function export_data(string $key, string $from, string $to): array
                 return [$r['day'], $nm, $r['sales'], $r['orders'], $r['units'], $r['spend'], $r['spend'] > 0 ? round($r['sales'] / $r['spend'], 2) : '', $r['who'], $r['src']];
             }, $q('SELECT d.*, u.name AS who FROM ecom_daily d LEFT JOIN users u ON u.id = d.user_id WHERE d.day BETWEEN ? AND ? ORDER BY d.day, d.platform', [$from, $to]));
             return [$name, ['Date', 'Platform', 'Sales', 'Orders', 'Units', 'Ad spend', 'ROAS', 'Updated by', 'Source'], $rows];
+        case 'sales_all':
+            $rows = [];
+            foreach ($q('SELECT * FROM ecom_daily WHERE day BETWEEN ? AND ?', [$from, $to]) as $r) {
+                $rows[] = [$r['day'], 'Online', 'Marketplace', ECOM_PLATFORMS[$r['platform']][0] ?? $r['platform'], $r['sales'], $r['orders'], $r['spend'], 'Yes', ''];
+            }
+            $web = (int)$q('SELECT COUNT(*) c FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.web = 1 AND d.sales > 0 AND d.day BETWEEN ? AND ?', [$from, $to])[0]['c'] > 0;
+            foreach ($q('SELECT d.*, c.name, c.kind FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE d.day BETWEEN ? AND ?', [$from, $to]) as $r) {
+                $rows[] = [$r['day'], $r['kind'] === 'online' ? 'Online' : 'Offline', $r['kind'] === 'online' ? 'Website' : 'Offline', $r['name'], $r['sales'], $r['orders'], '', 'Yes', $r['note']];
+            }
+            foreach ($q('SELECT order_date d, SUM(amount) a, COUNT(*) n FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date', [$from, $to]) as $r) {
+                $rows[] = [$r['d'], 'Online', 'Website', 'Inside Sales (call team)', $r['a'], $r['n'], '', $web ? 'No (part of website total)' : 'Yes', ''];
+            }
+            usort($rows, fn($a, $b) => [$a[0], $a[1], $a[3]] <=> [$b[0], $b[1], $b[3]]);
+            return [$name, ['Date', 'Type', 'Group', 'Platform / channel', 'Sales', 'Orders', 'Ad spend', 'Counted in total', 'Note'], $rows];
+        case 'tasks_monthly':
+            $rows = [];
+            $m = substr($from, 0, 7);
+            while ($m <= substr($to, 0, 7)) {
+                foreach (tasks_month($m)['per'] as $p) {
+                    if (!$p['work'] && !$p['leave'] && !$p['tasks']) { continue; }
+                    $rows[] = [$m, $p['name'], $p['designation'], $p['work'], $p['leave'], $p['tasks'], $p['done'], $p['prog'], $p['blocked'], round($p['hours'], 2), $p['work'] ? round($p['hours'] / $p['work'], 2) : ''];
+                }
+                $m = date('Y-m', strtotime($m . '-01 +1 month'));
+            }
+            return [$name, ['Month', 'Employee', 'Designation', 'Days reported', 'Leave days', 'Tasks', 'Done', 'In progress', 'Blocked', 'Hours', 'Avg hours per day'], $rows];
         case 'reports':
             $rows = array_map(fn($r) => [$r['report_date'], $r['name'], $r['designation'], $r['type'], $r['title'], $r['category'], $r['hours'], $r['status'], $r['remarks'], $r['note']],
                 $q("SELECT r.report_date, r.type, r.note, u.name, u.designation, t.title, t.category, t.hours, t.status, t.remarks FROM reports r JOIN users u ON u.id = r.user_id LEFT JOIN tasks t ON t.report_id = r.id WHERE r.report_date BETWEEN ? AND ? ORDER BY r.report_date, u.name, t.id", [$from, $to]));

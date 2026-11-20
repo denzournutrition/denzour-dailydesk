@@ -47,6 +47,8 @@ $counts['sales_orders'] = $cnt('SELECT COUNT(*) FROM sales_orders WHERE order_da
 $counts['sales_calls'] = $cnt('SELECT COUNT(*) FROM sales_calls WHERE call_date BETWEEN ? AND ?');
 $counts['sales_minutes'] = $cnt('SELECT COUNT(*) FROM sales_daily WHERE day BETWEEN ? AND ?');
 $counts['ecom_daily'] = $cnt('SELECT COUNT(*) FROM ecom_daily WHERE day BETWEEN ? AND ?');
+$counts['sales_all'] = $counts['ecom_daily'] + $cnt('SELECT COUNT(*) FROM channel_daily WHERE day BETWEEN ? AND ?') + $cnt('SELECT COUNT(DISTINCT order_date) FROM sales_orders WHERE order_date BETWEEN ? AND ?');
+$counts['tasks_monthly'] = $cnt('SELECT COUNT(DISTINCT user_id || substr(report_date,1,7)) FROM reports WHERE report_date BETWEEN ? AND ?');
 $counts['reports'] = $cnt('SELECT COUNT(*) FROM reports WHERE report_date BETWEEN ? AND ?');
 $qs = fn(array $x) => h(url('exports', ['from' => $from, 'to' => $to] + $x));
 $first = substr($today, 0, 7) . '-01';

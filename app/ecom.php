@@ -11,6 +11,8 @@ const ECOM_PLATFORMS = [
     'myntra'   => ['Myntra',    '#FF3F6C', '#ffffff'],
     'hugulife' => ['HUGU Life', '#6D4AC8', '#ffffff'],
     'tata1mg'  => ['Tata 1mg',  '#FF6F61', '#ffffff'],
+    'amazon'   => ['Amazon',    '#FF9900', '#111111'],
+    'flipkart' => ['Flipkart',  '#2874F0', '#ffffff'],
 ];
 
 function ecom_migrate(PDO $pdo): void
@@ -77,6 +79,8 @@ function ecom_platform_key(string $text): string
     if (preg_match('/myntra/', $t)) { return 'myntra'; }
     if (preg_match('/hugu|hyugu|hyuga|hugh/', $t)) { return 'hugulife'; }
     if (preg_match('/1\s*mg|tata/', $t)) { return 'tata1mg'; }
+    if (preg_match('/amazon|amzn/', $t)) { return 'amazon'; }
+    if (preg_match('/flipkart|flipcart|fk\b/', $t)) { return 'flipkart'; }
     return '';
 }
 

@@ -28,6 +28,8 @@ $routes = [
     'attendance'=> ['file' => 'attendance','roles' => ['employee'],                   'auth' => true],
     'attboard'  => ['file' => 'attboard',  'roles' => null, 'cap' => 'dashboard', 'auth' => true],
     'exports'   => ['file' => 'exports',   'roles' => null, 'cap' => 'dashboard', 'auth' => true],
+    'ceo'       => ['file' => 'ceo',       'roles' => null, 'cap' => 'dashboard', 'auth' => true],
+    'channels'  => ['file' => 'channels',  'roles' => ['employee', 'admin'],      'auth' => true],
     'profile'   => ['file' => 'profile',   'roles' => null,                       'auth' => true],
     'team'      => ['file' => 'team',      'roles' => ['admin', 'ceo'],           'auth' => true],
     'avatar'    => ['file' => 'avatar',    'roles' => null,                       'auth' => true],

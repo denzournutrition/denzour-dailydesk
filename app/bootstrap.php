@@ -10,6 +10,7 @@ require __DIR__ . '/attendance.php';
 require __DIR__ . '/ecom.php';
 require __DIR__ . '/gsync.php';
 require __DIR__ . '/profile.php';
+require __DIR__ . '/channels.php';
 
 function cfg(string $k, $d = null)
 {
@@ -133,6 +134,7 @@ function migrate(PDO $pdo): void
     ecom_migrate($pdo);
     gsync_migrate($pdo);
     profile_migrate($pdo);
+    channels_migrate($pdo);
     att_migrate($pdo);
 }
 
@@ -245,7 +247,7 @@ function can_view_dashboard(?array $u = null): bool
 
 function home_for(array $u): string
 {
-    return ($u['role'] === 'ceo' || !files_reports($u)) ? url('dashboard') : url('report');
+    return $u['role'] === 'ceo' ? url('ceo') : (!files_reports($u) ? url('dashboard') : url('report'));
 }
 
 /* ---------- dates ---------- */
@@ -371,7 +373,11 @@ function layout_head(string $title, string $bodyClass = ''): void
             $work[] = ['history', 'My history', 'clock'];
         }
         if (can_view_dashboard($u)) {
-            array_unshift($work, ['dashboard', 'Dashboard', 'grid']);
+            array_unshift($work, ['dashboard', 'Team dashboard', 'grid']);
+            array_unshift($work, ['ceo', 'Sales overview', 'trend']);
+        }
+        if (can_enter_channels($u)) {
+            $work[] = ['channels', 'Other sales', 'bag'];
         }
         if ($u['role'] === 'employee') {
             $work[] = ['attendance', 'My day', 'coffee'];

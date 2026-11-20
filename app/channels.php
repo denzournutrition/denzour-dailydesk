@@ -1,0 +1,122 @@
+<?php
+defined('DD') or exit;
+
+/* Website and offline sales channels, plus the CEO sales roll-up across every platform. */
+
+function channels_migrate(PDO $pdo): void
+{
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sales_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('online','offline')),
+        web INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS channel_daily (
+        channel_id INTEGER NOT NULL REFERENCES sales_channels(id) ON DELETE CASCADE,
+        day TEXT NOT NULL,
+        sales REAL NOT NULL DEFAULT 0,
+        orders INTEGER NOT NULL DEFAULT 0,
+        user_id INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (channel_id, day)
+    )");
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_chd_day ON channel_daily(day)');
+    if ((int)$pdo->query('SELECT COUNT(*) FROM sales_channels')->fetchColumn() === 0) {
+        $ins = $pdo->prepare('INSERT INTO sales_channels (name, kind, web) VALUES (?,?,?)');
+        $ins->execute(['Website (denzournutrition.com)', 'online', 1]);
+        $ins->execute(['Offline: gyms and supplement stores', 'offline', 0]);
+    }
+}
+
+function channels_all(bool $onlyActive = true): array
+{
+    return db()->query('SELECT * FROM sales_channels' . ($onlyActive ? ' WHERE active = 1' : '') . " ORDER BY kind DESC, name")->fetchAll();
+}
+
+function can_enter_channels(?array $u = null): bool
+{
+    $u = $u ?? user();
+    return $u && ($u['role'] === 'admin' || ($u['role'] === 'employee' && (can_ecom_desk($u) || can_sales_desk($u))));
+}
+
+/**
+ * Sales for every platform between two dates.
+ * Online = marketplaces + website. Inside Sales orders are website orders, so they are an "of which" line
+ * whenever website sales are entered, and are counted as the website only when they are not.
+ */
+function ceo_sales(string $from, string $to): array
+{
+    $pdo = db();
+    $q = function (string $sql, array $a) use ($pdo) { $st = $pdo->prepare($sql); $st->execute($a); return $st->fetchAll(); };
+    $rows = [];
+    $eco = [];
+    foreach ($q('SELECT platform, SUM(sales) s, SUM(orders) o, SUM(spend) sp, COUNT(*) n, MAX(day) last FROM ecom_daily WHERE day BETWEEN ? AND ? GROUP BY platform', [$from, $to]) as $r) { $eco[$r['platform']] = $r; }
+    foreach (ECOM_PLATFORMS as $k => $p) {
+        $r = $eco[$k] ?? null;
+        $rows[] = ['key' => 'p:' . $k, 'label' => $p[0], 'group' => 'Marketplace', 'kind' => 'online', 'sales' => (float)($r['s'] ?? 0), 'orders' => (int)($r['o'] ?? 0),
+            'spend' => (float)($r['sp'] ?? 0), 'days' => (int)($r['n'] ?? 0), 'last' => $r['last'] ?? null, 'of' => false, 'platform' => $k];
+    }
+    $webEntered = false;
+    foreach ($q('SELECT c.id, c.name, c.kind, c.web, SUM(d.sales) s, SUM(d.orders) o, COUNT(d.day) n, MAX(d.day) last FROM sales_channels c LEFT JOIN channel_daily d ON d.channel_id = c.id AND d.day BETWEEN ? AND ? WHERE c.active = 1 GROUP BY c.id ORDER BY c.kind DESC, c.name', [$from, $to]) as $r) {
+        if ($r['web'] && (float)$r['s'] > 0) { $webEntered = true; }
+        $rows[] = ['key' => 'c:' . $r['id'], 'label' => $r['name'], 'group' => $r['kind'] === 'online' ? 'Website' : 'Offline', 'kind' => $r['kind'], 'sales' => (float)$r['s'], 'orders' => (int)$r['o'],
+            'spend' => 0.0, 'days' => (int)$r['n'], 'last' => $r['last'], 'of' => false, 'platform' => ''];
+    }
+    $in = $q('SELECT SUM(amount) s, COUNT(*) o, COUNT(DISTINCT order_date) n, MAX(order_date) last FROM sales_orders WHERE order_date BETWEEN ? AND ?', [$from, $to])[0];
+    $rows[] = ['key' => 'inside', 'label' => 'Inside Sales (call team)', 'group' => 'Website', 'kind' => 'online', 'sales' => (float)$in['s'], 'orders' => (int)$in['o'], 'spend' => 0.0,
+        'days' => (int)$in['n'], 'last' => $in['last'], 'of' => $webEntered, 'platform' => ''];
+    $tot = ['online' => 0.0, 'offline' => 0.0, 'orders' => 0, 'spend' => 0.0, 'mp_sales' => 0.0];
+    foreach ($rows as $r) {
+        if ($r['of']) { continue; }
+        $tot[$r['kind']] += $r['sales'];
+        $tot['orders'] += $r['orders'];
+        $tot['spend'] += $r['spend'];
+        if ($r['group'] === 'Marketplace') { $tot['mp_sales'] += $r['sales']; }
+    }
+    $tot['all'] = $tot['online'] + $tot['offline'];
+    return ['rows' => $rows, 'tot' => $tot, 'web_entered' => $webEntered];
+}
+
+/** Per-day online and offline totals for a date range (same counting rules as ceo_sales). */
+function ceo_daily(string $from, string $to, bool $webEntered): array
+{
+    $pdo = db();
+    $d = [];
+    $add = function (string $day, string $kind, float $v) use (&$d) { $d[$day] ??= ['online' => 0.0, 'offline' => 0.0]; $d[$day][$kind] += $v; };
+    $st = $pdo->prepare('SELECT day, SUM(sales) s FROM ecom_daily WHERE day BETWEEN ? AND ? GROUP BY day'); $st->execute([$from, $to]);
+    foreach ($st as $r) { $add($r['day'], 'online', (float)$r['s']); }
+    $st = $pdo->prepare('SELECT d.day, c.kind, SUM(d.sales) s FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.active = 1 AND d.day BETWEEN ? AND ? GROUP BY d.day, c.kind'); $st->execute([$from, $to]);
+    foreach ($st as $r) { $add($r['day'], $r['kind'], (float)$r['s']); }
+    if (!$webEntered) {
+        $st = $pdo->prepare('SELECT order_date day, SUM(amount) s FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date'); $st->execute([$from, $to]);
+        foreach ($st as $r) { $add($r['day'], 'online', (float)$r['s']); }
+    }
+    krsort($d);
+    return $d;
+}
+
+/** Month-by-month team task summary: one row per person. */
+function tasks_month(string $month): array
+{
+    $pdo = db();
+    [$s, $e] = s_month_range($month);
+    $people = $pdo->query("SELECT id, name, designation FROM users WHERE active = 1 AND role = 'employee' ORDER BY name")->fetchAll();
+    $per = [];
+    foreach ($people as $p) { $per[(int)$p['id']] = $p + ['work' => 0, 'leave' => 0, 'tasks' => 0, 'done' => 0, 'prog' => 0, 'blocked' => 0, 'hours' => 0.0]; }
+    $st = $pdo->prepare('SELECT user_id, type, COUNT(*) n FROM reports WHERE report_date BETWEEN ? AND ? GROUP BY user_id, type'); $st->execute([$s, $e]);
+    foreach ($st as $r) { if (isset($per[(int)$r['user_id']])) { $per[(int)$r['user_id']][$r['type'] === 'leave' ? 'leave' : 'work'] = (int)$r['n']; } }
+    $st = $pdo->prepare('SELECT r.user_id, t.status, COUNT(*) n, SUM(t.hours) h FROM tasks t JOIN reports r ON r.id = t.report_id WHERE r.report_date BETWEEN ? AND ? GROUP BY r.user_id, t.status'); $st->execute([$s, $e]);
+    foreach ($st as $r) {
+        if (!isset($per[(int)$r['user_id']])) { continue; }
+        $x = &$per[(int)$r['user_id']];
+        $x['tasks'] += (int)$r['n']; $x['hours'] += (float)$r['h'];
+        if ($r['status'] === 'done') { $x['done'] += (int)$r['n']; } elseif ($r['status'] === 'blocked') { $x['blocked'] += (int)$r['n']; } else { $x['prog'] += (int)$r['n']; }
+        unset($x);
+    }
+    $cat = [];
+    $st = $pdo->prepare('SELECT t.category c, SUM(t.hours) h FROM tasks t JOIN reports r ON r.id = t.report_id WHERE r.report_date BETWEEN ? AND ? GROUP BY t.category ORDER BY h DESC'); $st->execute([$s, $e]);
+    foreach ($st as $r) { $cat[$r['c']] = (float)$r['h']; }
+    return ['per' => array_values($per), 'cat' => $cat, 'wd' => count(working_days($s, min($e, today())))];
+}

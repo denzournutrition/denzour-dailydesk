@@ -128,7 +128,7 @@ layout_head('E-commerce desk');
 
 <section class="card" id="upload">
   <div class="card__h"><h2>Upload sheet</h2></div>
-  <p class="muted tiny">Excel or CSV with a Date column and Sales (or GMV) and Ad spend columns. Add a Platform column to put all four platforms in one sheet, or use one tab per platform named Blinkit, Myntra, HUGU Life or Tata 1mg. Several rows for the same day are added together.</p>
+  <p class="muted tiny">Excel or CSV with a Date column and Sales (or GMV) and Ad spend columns. Add a Platform column to put all platforms in one sheet, or use one tab per platform named Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon or Flipkart. Several rows for the same day are added together.</p>
   <form method="post" enctype="multipart/form-data" action="<?= h($self) ?>" class="upform">
     <?= $csrf ?><input type="hidden" name="action" value="upload">
     <label class="field grow"><span>Sheet file</span><input type="file" name="sheet" accept=".xlsx,.csv" required></label>
