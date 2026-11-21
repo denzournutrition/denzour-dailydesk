@@ -175,6 +175,12 @@ function track_channel(string $name, string $kind): string
     return $c[$k] ?? ($kind === 'platform' ? 'online' : 'none');
 }
 
+function track_saved_user(string $name): int
+{
+    $st = db()->prepare('SELECT user_id FROM track_map WHERE name_key = ?'); $st->execute([track_key($name)]);
+    return (int)($st->fetchColumn() ?: 0);
+}
+
 function track_load(string $month): array
 {
     $pdo = db();
@@ -203,7 +209,7 @@ function track_load(string $month): array
         $left = max(1, $dim - $asof);
         $e['need_day'] = $e['monthly'] > $ach ? $e['remaining'] / $left : 0.0;
         $e['projected'] = $asof > 0 ? $ach / $asof * $dim : 0.0;
-        $e['user_id'] = $e['kind'] === 'person' ? track_user_for($nm, $users) : 0;
+        $e['user_id'] = $e['kind'] === 'person' ? track_user_for($nm, $users) : track_saved_user($nm);
         $e['channel'] = track_channel($nm, $e['kind']);
         if ($e['monthly'] > 0 && $ach >= $e['monthly']) { $e['state'] = 'hit'; }
         elseif ($asof === 0) { $e['state'] = 'none'; }
@@ -226,8 +232,30 @@ function track_load(string $month): array
 
 function track_for_user(array $data, int $uid): ?array
 {
-    foreach ($data['ents'] as $e) { if ($e['kind'] === 'person' && $e['user_id'] === $uid) { return $e; } }
-    return null;
+    return track_entities_for_user($data, $uid)[0] ?? null;
+}
+
+/** Everything assigned to this employee: their own target first, then any platforms given to them. */
+function track_entities_for_user(array $data, int $uid): array
+{
+    $out = [];
+    foreach ($data['ents'] as $e) { if ($e['kind'] === 'person' && $e['user_id'] === $uid) { $out[] = $e; } }
+    foreach ($data['ents'] as $e) { if ($e['kind'] === 'platform' && $e['user_id'] === $uid) { $out[] = $e; } }
+    return $out;
+}
+
+/** One combined figure for several targets (used in the one-line strip). */
+function track_combine(array $list, array $d): array
+{
+    if (count($list) === 1) { return $list[0]; }
+    $c = ['name' => 'Your targets', 'monthly' => 0.0, 'achieved' => 0.0, 'expected' => 0.0];
+    foreach ($list as $e) { foreach (['monthly', 'achieved', 'expected'] as $k) { $c[$k] += $e[$k]; } }
+    $c['ach_pct'] = $c['monthly'] > 0 ? $c['achieved'] / $c['monthly'] * 100 : 0;
+    $c['pace_pct'] = $c['expected'] > 0 ? $c['achieved'] / $c['expected'] * 100 : 0;
+    $c['gap'] = $c['achieved'] - $c['expected'];
+    $p = $c['pace_pct'];
+    $c['state'] = $c['monthly'] > 0 && $c['achieved'] >= $c['monthly'] ? 'hit' : ($d['asof'] === 0 ? 'none' : ($p >= 100 ? 'ahead' : ($p >= 90 ? 'on' : ($p >= 70 ? 'behind' : 'off'))));
+    return $c;
 }
 
 function track_state_chip(string $s): string
@@ -350,8 +378,9 @@ function track_strip(array $u): void
     $month = substr(today(), 0, 7);
     $cache ??= track_load($month);
     if (!$cache['ents']) { return; }
-    $e = track_for_user($cache, (int)$u['id']);
-    if (!$e) { return; }
+    $list = track_entities_for_user($cache, (int)$u['id']);
+    if (!$list) { return; }
+    $e = track_combine($list, $cache);
     $pct = (int)round(min(100, $e['ach_pct']));
     $pace = $e['monthly'] > 0 && $cache['asof'] > 0 ? min(100, $e['expected'] / $e['monthly'] * 100) : 0;
     ?>
@@ -370,7 +399,7 @@ function track_has(array $u): bool
     $id = (int)$u['id'];
     if (!isset($r[$id])) {
         $d = track_load(substr(today(), 0, 7));
-        $r[$id] = $d['ents'] ? track_for_user($d, $id) !== null : false;
+        $r[$id] = $d['ents'] ? track_entities_for_user($d, $id) !== [] : false;
     }
     return $r[$id];
 }

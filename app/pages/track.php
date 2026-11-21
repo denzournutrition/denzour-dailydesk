@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $u['role'] === 'admin') {
 $d = track_load($month);
 $who = (string)($_GET['who'] ?? '');
 $sel = ($isAll && $who !== '' && isset($d['ents'][$who])) ? $d['ents'][$who] : null;
-$mine = $isAll ? null : track_for_user($d, (int)$u['id']);
+$mine = $isAll ? [] : track_entities_for_user($d, (int)$u['id']);
 $people = $pdo->query("SELECT id, name FROM users WHERE active = 1 AND role IN ('employee','admin') ORDER BY name")->fetchAll();
 $mlabel = date('F Y', strtotime($month . '-01'));
 
@@ -40,11 +40,13 @@ layout_head('Targets');
 
 <?php elseif (!$isAll): ?>
   <?php if (!$mine): ?>
-    <section class="card"><p class="muted" style="margin:0">No target is linked to your name for <?= h($mlabel) ?>. Ask your admin to link it (Targets → Link names).</p></section>
-  <?php else: track_hero($mine, $d, $u['name']); ?>
-    <section class="card"><div class="card__h"><h2>Day by day</h2><span class="muted tiny">Bars = what you did · dashed line = daily target</span></div><?= track_chart($mine) ?></section>
-    <section class="card"><div class="card__h"><h2>Daily tracker</h2></div><?php track_daily_table($mine, $d); ?></section>
-  <?php endif; ?>
+    <section class="card"><p class="muted" style="margin:0">No target is linked to your name for <?= h($mlabel) ?>. Ask your admin to link it (Targets → Name settings).</p></section>
+  <?php else: foreach ($mine as $i => $me):
+      $title = $me['kind'] === 'platform' ? $me['name'] . ' (assigned to you)' : $u['name']; ?>
+    <?php track_hero($me, $d, $title); ?>
+    <section class="card"><div class="card__h"><h2>Day by day · <?= h($me['name']) ?></h2><span class="muted tiny">Bars = what you did · dashed line = daily target</span></div><?= track_chart($me) ?></section>
+    <details class="card" <?= $i === 0 ? 'open' : '' ?>><summary><strong>Daily tracker · <?= h($me['name']) ?></strong></summary><div style="margin-top:12px"><?php track_daily_table($me, $d); ?></div></details>
+  <?php endforeach; endif; ?>
 
 <?php elseif ($sel): ?>
   <p><a class="btn btn--ghost btn--sm" href="<?= h(url('track', ['month' => $month])) ?>">‹ Everyone</a></p>
@@ -69,11 +71,11 @@ layout_head('Targets');
     <summary><strong>Name settings</strong> <span class="muted tiny">link people to employees and choose Online or Offline for the Sales overview</span></summary>
     <form method="post" action="<?= h(url('track', ['month' => $month])) ?>" style="margin-top:14px">
       <?= csrf_field() ?><input type="hidden" name="action" value="map"><input type="hidden" name="month" value="<?= h($month) ?>">
-      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Employee (their own target page)</th><th>Show sales on Sales overview as</th></tr></thead><tbody>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Assigned to employee (they see this target)</th><th>Show sales on Sales overview as</th></tr></thead><tbody>
       <?php foreach ($d['ents'] as $e): $k = track_key($e['name']); ?>
         <tr><td><strong><?= h($e['name']) ?></strong> <span class="muted tiny"><?= $e['kind'] === 'person' ? 'person' : 'platform' ?></span></td>
-          <td><?php if ($e['kind'] === 'person'): ?><select name="map[<?= h($k) ?>]"><option value="0">Not linked</option>
-            <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?></select><?php else: ?><span class="muted tiny">–</span><?php endif; ?></td>
+          <td><select name="map[<?= h($k) ?>]"><option value="0"><?= $e['kind'] === 'person' ? 'Not linked' : 'Nobody' ?></option>
+            <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?></select></td>
           <td><select name="cls[<?= h($k) ?>]"><?php foreach (['online' => 'Online', 'offline' => 'Offline', 'none' => 'Not counted'] as $cv => $cl): ?><option value="<?= h($cv) ?>" <?= $e['channel'] === $cv ? 'selected' : '' ?>><?= h($cl) ?></option><?php endforeach; ?></select></td></tr>
       <?php endforeach; ?>
       </tbody></table></div>
