@@ -367,39 +367,45 @@ function layout_head(string $title, string $bodyClass = ''): void
     $page = $_GET['p'] ?? '';
     $nav = [];
     if ($u) {
-        $work = [];
+        $my = [];
         if (files_reports($u)) {
-            $work[] = ['report', 'Daily report', 'edit'];
-            $work[] = ['history', 'My history', 'clock'];
-        }
-        if (can_view_dashboard($u)) {
-            array_unshift($work, ['dashboard', 'Team dashboard', 'grid']);
-            array_unshift($work, ['ceo', 'Sales overview', 'trend']);
-        }
-        if (can_enter_channels($u)) {
-            $work[] = ['channels', 'Other sales', 'bag'];
+            $my[] = ['report', 'Daily report', 'edit'];
+            $my[] = ['history', 'My history', 'clock'];
         }
         if ($u['role'] === 'employee') {
-            $work[] = ['attendance', 'My day', 'coffee'];
+            $my[] = ['attendance', 'My day', 'coffee'];
         }
+        if (can_enter_channels($u)) {
+            $my[] = ['channels', 'Other sales', 'bag'];
+        }
+        $desks = [];
         if (can_sales_desk($u)) {
             $cb = is_sales($u) || !empty($u['sales_access']) ? count(sales_callbacks((int)$u['id'])) : 0;
-            $work[] = ['salesdesk', 'Sales desk', 'upload', $cb];
+            $desks[] = ['salesdesk', 'Sales desk', 'upload', $cb];
         }
         if (can_ecom_desk($u)) {
-            $work[] = ['ecomdesk', 'E-commerce desk', 'bag'];
+            $desks[] = ['ecomdesk', 'E-commerce desk', 'bag'];
         }
+        $boards = [];
         if (can_view_dashboard($u)) {
-            $work[] = ['salesdash', 'Inside Sales', 'trend'];
-            $work[] = ['ecomdash', 'E-commerce', 'bag'];
-            $work[] = ['attboard', 'Attendance', 'check'];
-            $work[] = ['exports', 'Downloads', 'download'];
+            $boards[] = ['ceo', 'Sales overview', 'trend'];
+            $boards[] = ['dashboard', 'Team dashboard', 'grid'];
+            $boards[] = ['salesdash', 'Inside Sales', 'trend'];
+            $boards[] = ['ecomdash', 'E-commerce', 'bag'];
+            $boards[] = ['attboard', 'Attendance', 'check'];
+            $boards[] = ['exports', 'Downloads', 'download'];
         }
         if (in_array($u['role'], ['admin', 'ceo'], true)) {
-            $work[] = ['team', 'Team', 'users'];
+            $boards[] = ['team', 'Team', 'users'];
         }
-        if ($work) {
-            $nav[] = ['Workspace', $work];
+        if ($my) {
+            $nav[] = ['My work', $my];
+        }
+        if ($desks) {
+            $nav[] = ['My desks', $desks];
+        }
+        if ($boards) {
+            $nav[] = [$my || $desks ? 'Dashboards' : 'Workspace', $boards];
         }
         if ($u['role'] === 'admin') {
             $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['update', 'Update', 'upload']]];
@@ -450,6 +456,14 @@ function layout_head(string $title, string $bodyClass = ''): void
 <?php if ($u && $u['role'] === 'employee' && $page !== 'report'): foreach (report_reminders($u) as [$rt, $rl]): ?>
   <div class="flash flash--info remind" role="status"><?= icon('clock') ?><span><?= h($rt) ?></span><a class="btn btn--sm" href="<?= h($rl) ?>">Open daily report</a></div>
 <?php endforeach; endif; ?>
+<?php if ($u && $u['role'] === 'employee' && in_array($page, ['report', 'attendance', 'salesdesk', 'ecomdesk', 'history', 'channels'], true)):
+    $hr = (int)date('G'); $greet = $hr < 12 ? 'Good morning' : ($hr < 17 ? 'Good afternoon' : 'Good evening');
+    $first = explode(' ', trim((string)$u['name']))[0]; ?>
+  <section class="hello">
+    <div class="hello__t"><span class="hello__eye"><?= h(fmt_date(today(), true)) ?></span><h2><?= h($greet) ?>, <?= h($first) ?></h2><p><?= h($u['designation'] ?: 'Team') ?> · Denzour Nutrition</p></div>
+    <div class="hello__a"><a class="btn btn--sm" href="<?= h(url('report')) ?>"><?= icon('edit') ?>Daily report</a><a class="btn btn--ghost btn--sm" href="<?= h(url('attendance')) ?>"><?= icon('coffee') ?>My day</a></div>
+  </section>
+<?php endif; ?>
 <?php foreach (take_flash() as [$type, $msg]): ?>
   <div class="flash flash--<?= h($type) ?>" role="status"><?= h($msg) ?></div>
 <?php endforeach; ?>

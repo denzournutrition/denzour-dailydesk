@@ -338,3 +338,47 @@ body.login{font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-se
 .lg__btn{background:#111;color:#fff;box-shadow:0 12px 26px rgba(17,17,17,.25)}
 .lg__btn:hover{background:#F09018;filter:none}
 .lg__forgot,.lg__help strong{color:#D9730D}
+
+/* ---------- Employee experience: premium polish ---------- */
+.hello{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between;margin:0 0 22px;padding:24px 28px;border-radius:22px;color:#fff;position:relative;overflow:hidden;background:radial-gradient(520px 260px at 92% -20%,rgba(160,215,185,.35),transparent 60%),linear-gradient(135deg,#2F6F55 0%,#215842 60%,#173D2E 100%);box-shadow:0 14px 34px rgba(31,90,66,.22)}
+.hello::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.045) 0 2px,transparent 2px 30px);pointer-events:none}
+.hello__t,.hello__a{position:relative;z-index:1}
+.hello__eye{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#BFE0CD}
+.hello h2{margin:4px 0 2px;font-size:1.65rem;font-weight:800;letter-spacing:-.02em;color:#fff}
+.hello p{margin:0;color:#D5EADD;font-size:.92rem}
+.hello__a{display:flex;gap:10px;flex-wrap:wrap}
+.hello .btn{background:#fff;color:#1F5A42;border-color:#fff;box-shadow:none}.hello .btn:hover{background:#EAF3EE;border-color:#EAF3EE}
+.hello .btn--ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)}.hello .btn--ghost:hover{background:rgba(255,255,255,.2)}
+.pagehead h1{font-size:1.5rem;letter-spacing:-.02em}
+.nav__h{padding:18px 12px 6px;font-weight:700;letter-spacing:.1em}
+.nav a{transition:background .12s,color .12s}.nav a.is-on{box-shadow:inset 3px 0 0 var(--pri)}
+.side{background:linear-gradient(180deg,#fff,#FAFCF9)}
+.card{border-radius:20px}.card h2{font-size:1.05rem;letter-spacing:-.01em}
+.kpi{position:relative;overflow:hidden}.kpi::before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--pri),#7DBB9A);opacity:.85}
+.kpi--bad::before{background:var(--bad)}
+.kpi__v{font-size:1.85rem;font-variant-numeric:tabular-nums}
+.field input,.field select,.field textarea,.item select,.datenav input{background:#FAFCF9;border-color:var(--line);border-radius:12px;transition:border-color .12s,box-shadow .12s,background .12s}
+.field input:hover,.field select:hover,.field textarea:hover{border-color:#C5D3C8}
+.field input:focus,.field select:focus,.field textarea:focus{background:#fff;box-shadow:0 0 0 4px rgba(47,111,85,.13);outline:0;border-color:var(--pri)}
+input[type=file]{width:100%;font:inherit;font-size:.9rem;color:var(--mute);background:#FAFCF9;border:1.5px dashed #BBD0C2;border-radius:14px;padding:12px 14px;cursor:pointer}
+input[type=file]:hover{border-color:var(--pri);background:var(--prisoft)}
+input[type=file]::file-selector-button{font:inherit;font-weight:600;font-size:.85rem;margin-right:12px;padding:8px 14px;border:0;border-radius:10px;background:var(--pri);color:#fff;cursor:pointer}
+input[type=file]::file-selector-button:hover{background:var(--pri-2)}
+input[type=date],input[type=time]{font-family:inherit}
+.btn{background:linear-gradient(180deg,#38805F,#2F6F55);transition:transform .1s,box-shadow .12s,filter .12s}.btn:hover{background:linear-gradient(180deg,#2F6F55,#1F5A42);transform:translateY(-1px);box-shadow:0 6px 16px rgba(31,90,66,.25)}.btn:active{transform:none}
+.btn--ghost,.btn--danger{background:#fff}.btn--ghost:hover{background:var(--soft);transform:none;box-shadow:none}
+.btn--danger:hover{transform:none}
+.task{border-radius:18px;border-left:4px solid var(--pri)}
+.task legend{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase}
+.leave{border-style:solid;border-color:var(--line);background:#fff}
+.savebar{border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(22,36,29,.05)}
+.thead{font-weight:700;color:var(--mute)}
+.emp:hover,.trow:hover{background:#F6F9F5}
+.chip{font-weight:600}
+.flash--info{background:var(--prisoft);color:var(--pri-2)}
+.pill{box-shadow:0 1px 2px rgba(22,36,29,.04)}
+.me{background:linear-gradient(135deg,#F2F7F3,#fff)}
+.seg input:checked+span{box-shadow:0 1px 2px rgba(22,36,29,.08)}
+.empty{color:var(--mute)}
+table{border-collapse:collapse}
+@media(max-width:700px){.hello{padding:20px;border-radius:18px}.hello h2{font-size:1.35rem}}
