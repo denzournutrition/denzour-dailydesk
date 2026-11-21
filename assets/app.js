@@ -74,11 +74,12 @@
     qa('input[name="hours[]"]', tasks).forEach(function (i) { var v = parseFloat(String(i.value).replace(',', '.')); if (v > 0) sum += v; });
     if (leave && leave.checked) sum = 0;
     total.textContent = (Math.round(sum * 100) / 100).toString();
+    var ss = q('#sheetsum'); if (ss) ss.textContent = total.textContent;
     if (bar) bar.classList.toggle('is-over', sum > maxDay);
   }
   function renumber() {
     qa('.task', tasks).forEach(function (t, i) {
-      var l = q('legend', t); if (l) l.textContent = 'Task ' + (i + 1);
+      var l = q('.cell-n', t); if (l) l.textContent = String(i + 1);
       var r = q('[data-remove]', t); if (r) r.hidden = tasks.children.length < 2;
     });
   }
@@ -93,6 +94,9 @@
     var t = b.closest('.task'); if (tasks.children.length > 1) { t.remove(); renumber(); recalc(); }
   });
   tasks.addEventListener('input', function (e) { if (e.target.name === 'hours[]') recalc(); });
+  tasks.addEventListener('change', function (e) { if (e.target.name === 'status[]') e.target.setAttribute('data-s', e.target.value); });
+  function grow(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 140) + 'px'; }
+  tasks.addEventListener('input', function (e) { if (e.target.classList.contains('c-title')) grow(e.target); });
   if (leave) leave.addEventListener('change', function () { area.hidden = leave.checked; recalc(); });
   // unsaved-changes guard
   var dirty = false;

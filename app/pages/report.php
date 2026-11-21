@@ -143,6 +143,21 @@ foreach ($form['tasks'] as $t) {
     $total += (float)$t['hours'];
 }
 
+function render_task_row(array $t, array $cats, bool $enabled, int $n): void
+{
+    $st = $t['status'] ?? 'done'; ?>
+        <div class="task">
+          <span class="cell-n"><?= $n ?: '' ?></span>
+          <textarea class="c-title" <?= $enabled ? '' : 'disabled' ?> name="title[]" rows="1" maxlength="300" aria-label="What did you work on?" placeholder="What did you work on?"><?= h($t['title'] ?? '') ?></textarea>
+          <select class="c-cat" <?= $enabled ? '' : 'disabled' ?> name="category[]" aria-label="Category"><?php foreach ($cats as $c): ?><option <?= ($t['category'] ?? '') === $c ? 'selected' : '' ?>><?= h($c) ?></option><?php endforeach; ?></select>
+          <input class="c-hrs" <?= $enabled ? '' : 'disabled' ?> type="number" name="hours[]" value="<?= h(($t['hours'] ?? '') === '' ? '' : fmt_hours((float)$t['hours'])) ?>" min="0" max="<?= h((string)cfg('max_hours_task', 16)) ?>" step="0.25" inputmode="decimal" placeholder="0" aria-label="Hours">
+          <select class="c-st" <?= $enabled ? '' : 'disabled' ?> name="status[]" data-s="<?= h($st) ?>" aria-label="Status"><?php foreach (['done' => 'Done', 'in_progress' => 'In progress', 'blocked' => 'Blocked'] as $k => $l): ?><option value="<?= h($k) ?>" <?= $st === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select>
+          <input class="c-rem" <?= $enabled ? '' : 'disabled' ?> type="text" name="remarks[]" maxlength="500" value="<?= h($t['remarks'] ?? '') ?>" placeholder="Result, link, or blocker" aria-label="Remarks">
+          <button type="button" class="task__remove" data-remove aria-label="Remove this row" title="Remove row">×</button>
+        </div>
+<?php
+}
+
 layout_head('Daily report');
 ?>
 <div class="pagehead">
@@ -186,40 +201,16 @@ layout_head('Daily report');
   </label>
 
   <div id="taskarea" <?= $form['type'] === 'leave' ? 'hidden' : '' ?>>
-    <div class="tasks" id="tasks">
-      <?php foreach ($form['tasks'] as $i => $t): ?>
-      <fieldset class="task" <?= $inWindow ? '' : 'disabled' ?>>
-        <legend class="sr">Task <?= $i + 1 ?></legend>
-        <label class="field field--title"><span>What did you work on?</span>
-          <textarea name="title[]" rows="2" maxlength="300" placeholder="e.g. Published 2 blogs on whey protein, built backlinks on 10 sites"><?= h($t['title']) ?></textarea>
-        </label>
-        <div class="task__row">
-          <label class="field"><span>Category</span>
-            <select name="category[]">
-              <?php foreach ($cats as $c): ?><option <?= ($t['category'] ?? '') === $c ? 'selected' : '' ?>><?= h($c) ?></option><?php endforeach; ?>
-            </select>
-          </label>
-          <label class="field"><span>Hours</span>
-            <input type="number" name="hours[]" value="<?= h($t['hours'] === '' ? '' : fmt_hours((float)$t['hours'])) ?>" min="0" max="<?= h((string)cfg('max_hours_task', 16)) ?>" step="0.25" inputmode="decimal" placeholder="0">
-          </label>
-          <label class="field"><span>Status</span>
-            <select name="status[]">
-              <?php foreach (['done' => 'Done', 'in_progress' => 'In progress', 'blocked' => 'Blocked'] as $k => $l): ?>
-                <option value="<?= h($k) ?>" <?= ($t['status'] ?? 'done') === $k ? 'selected' : '' ?>><?= h($l) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-        </div>
-        <label class="field"><span>Remarks <em>(optional)</em></span>
-          <input type="text" name="remarks[]" maxlength="500" value="<?= h($t['remarks'] ?? '') ?>" placeholder="Result, link, or what is stopping you">
-        </label>
-        <button type="button" class="task__remove" data-remove aria-label="Remove this task">Remove task</button>
-      </fieldset>
-      <?php endforeach; ?>
-    </div>
-    <?php if ($inWindow): ?>
-    <button type="button" class="btn btn--ghost" id="addtask">+ Add another task</button>
-    <?php endif; ?>
+    <section class="sheet">
+      <div class="sheet__head" aria-hidden="true"><span>#</span><span>Task</span><span>Category</span><span class="r">Hours</span><span>Status</span><span>Remarks</span><span></span></div>
+      <div class="tasks" id="tasks">
+        <?php foreach ($form['tasks'] as $i => $t) { render_task_row($t, $cats, $inWindow, $i + 1); } ?>
+      </div>
+      <?php if ($inWindow): ?>
+      <button type="button" class="sheet__add" id="addtask"><span>+</span>Add a row</button>
+      <?php endif; ?>
+      <div class="sheet__foot"><span>Total</span><strong class="num"><span id="sheetsum"><?= h(fmt_hours($total)) ?></span> h</strong></div>
+    </section>
   </div>
 
   <label class="field note">
@@ -236,27 +227,5 @@ layout_head('Daily report');
   </div>
 </form>
 
-<template id="tasktpl">
-  <fieldset class="task">
-    <legend class="sr">Task</legend>
-    <label class="field field--title"><span>What did you work on?</span>
-      <textarea name="title[]" rows="2" maxlength="300" placeholder="e.g. Published 2 blogs on whey protein, built backlinks on 10 sites"></textarea>
-    </label>
-    <div class="task__row">
-      <label class="field"><span>Category</span>
-        <select name="category[]"><?php foreach ($cats as $c): ?><option <?= $c === 'Execution' ? 'selected' : '' ?>><?= h($c) ?></option><?php endforeach; ?></select>
-      </label>
-      <label class="field"><span>Hours</span>
-        <input type="number" name="hours[]" min="0" max="<?= h((string)cfg('max_hours_task', 16)) ?>" step="0.25" inputmode="decimal" placeholder="0">
-      </label>
-      <label class="field"><span>Status</span>
-        <select name="status[]"><option value="done" selected>Done</option><option value="in_progress">In progress</option><option value="blocked">Blocked</option></select>
-      </label>
-    </div>
-    <label class="field"><span>Remarks <em>(optional)</em></span>
-      <input type="text" name="remarks[]" maxlength="500" placeholder="Result, link, or what is stopping you">
-    </label>
-    <button type="button" class="task__remove" data-remove aria-label="Remove this task">Remove task</button>
-  </fieldset>
-</template>
+<template id="tasktpl"><?php render_task_row(['title' => '', 'category' => 'Execution', 'hours' => '', 'status' => 'done', 'remarks' => ''], $cats, true, 0); ?></template>
 <?php layout_foot();
