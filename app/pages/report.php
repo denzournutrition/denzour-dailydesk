@@ -134,6 +134,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$routine = routine_for($u);
+$prefilled = false;
+if (!$existing && $form['type'] === 'work' && !$form['tasks'] && $_SERVER['REQUEST_METHOD'] !== 'POST' && $routine['daily']) {
+    foreach ($routine['daily'] as $r) {
+        $form['tasks'][] = ['title' => $r['title'], 'category' => in_array($r['category'], $cats, true) ? $r['category'] : 'Other', 'hours' => (float)$r['hours'] > 0 ? (float)$r['hours'] : '', 'status' => 'done', 'remarks' => ''];
+    }
+    $prefilled = true;
+}
 if (!$form['tasks'] && $form['type'] === 'work') {
     $form['tasks'][] = ['title' => '', 'category' => 'Execution', 'hours' => '', 'status' => 'done', 'remarks' => ''];
 }
@@ -201,6 +209,11 @@ layout_head('Daily report');
   </label>
 
   <div id="taskarea" <?= $form['type'] === 'leave' ? 'hidden' : '' ?>>
+    <?php if ($prefilled && $inWindow): ?><div class="routinebar routinebar--info">Your daily routine is already filled in. Change the hours, remove a row, or add extras, then submit.</div><?php endif; ?>
+    <?php if ($inWindow && $routine['extra']): ?>
+    <div class="routinebar" id="extras"><span class="routinebar__l">Add extra work</span>
+      <?php foreach ($routine['extra'] as $r): ?><button type="button" class="rchip" data-extra data-title="<?= h($r['title']) ?>" data-cat="<?= h($r['category']) ?>" data-hrs="<?= (float)$r['hours'] > 0 ? h(fmt_hours((float)$r['hours'])) : '' ?>">+ <?= h($r['title']) ?></button><?php endforeach; ?>
+    </div><?php endif; ?>
     <section class="sheet">
       <div class="sheet__head" aria-hidden="true"><span>#</span><span>Task</span><span>Category</span><span class="r">Hours</span><span>Status</span><span>Remarks</span><span></span></div>
       <div class="tasks" id="tasks">

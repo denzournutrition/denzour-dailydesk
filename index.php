@@ -14,6 +14,7 @@ $routes = [
     'export'    => ['file' => 'export',    'roles' => null, 'cap' => 'dashboard', 'auth' => true],
     'allreports'=> ['file' => 'allreports','roles' => ['admin'],                  'auth' => true],
     'people'    => ['file' => 'people',    'roles' => ['admin'],                  'auth' => true],
+    'routine'   => ['file' => 'routine',   'roles' => ['admin'],                  'auth' => true],
     'holidays'  => ['file' => 'holidays',  'roles' => ['admin'],                  'auth' => true],
     'gsync'     => ['file' => 'gsync',     'roles' => ['admin'],                  'auth' => true],
     'mysheet'   => ['file' => 'mysheet',   'roles' => ['employee', 'admin'],      'auth' => true],

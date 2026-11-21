@@ -446,3 +446,12 @@ table{border-collapse:collapse}
 details.card>summary{cursor:pointer;list-style:none}details.card>summary::-webkit-details-marker{display:none}
 @media(min-width:1100px){.kpis--5{grid-template-columns:repeat(5,1fr)}}
 .tstats{grid-template-columns:repeat(auto-fit,minmax(105px,1fr))}
+
+/* ---- Daily routine chips ---- */
+.routinebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.routinebar__l{font-size:12px;font-weight:600;color:var(--mute);margin-right:4px}
+.routinebar--info{padding:10px 14px;background:var(--prisoft);border:1px solid var(--line);border-radius:10px;color:var(--pri-2);font-size:13.5px}
+.rchip{font:inherit;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--pri-2);cursor:pointer}
+.rchip:hover{background:var(--prisoft);border-color:var(--pri)}
+
+.formrow .field select{min-width:150px}

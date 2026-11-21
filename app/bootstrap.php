@@ -10,6 +10,7 @@ require __DIR__ . '/attendance.php';
 require __DIR__ . '/ecom.php';
 require __DIR__ . '/gsync.php';
 require __DIR__ . '/track.php';
+require __DIR__ . '/routine.php';
 require __DIR__ . '/profile.php';
 require __DIR__ . '/channels.php';
 
@@ -135,6 +136,7 @@ function migrate(PDO $pdo): void
     ecom_migrate($pdo);
     gsync_migrate($pdo);
     track_migrate($pdo);
+    routine_migrate($pdo);
     profile_migrate($pdo);
     channels_migrate($pdo);
     att_migrate($pdo);
@@ -414,7 +416,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $nav[] = [$my || $desks ? 'Dashboards' : 'Workspace', $boards];
         }
         if ($u['role'] === 'admin') {
-            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['update', 'Update', 'upload']]];
+            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['routine', 'Daily routine', 'list'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['update', 'Update', 'upload']]];
         }
     }
     ?><!doctype html>

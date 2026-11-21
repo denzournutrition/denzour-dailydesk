@@ -89,6 +89,17 @@
     renumber();
     var last = tasks.lastElementChild; var ta = last && q('textarea', last); if (ta) ta.focus();
   });
+  var extras = q('#extras');
+  if (extras) extras.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-extra]'); if (!b) return;
+    var last = tasks.lastElementChild, blank = last && !q('.c-title', last).value.trim() && !q('.c-hrs', last).value;
+    var row;
+    if (blank) { row = last; } else { tasks.appendChild(tpl.content.cloneNode(true)); row = tasks.lastElementChild; }
+    var t = q('.c-title', row); t.value = b.getAttribute('data-title'); grow(t);
+    var c = q('.c-cat', row), cat = b.getAttribute('data-cat'); if (c) { for (var i = 0; i < c.options.length; i++) { if (c.options[i].text === cat) c.selectedIndex = i; } }
+    var hh = q('.c-hrs', row); hh.value = b.getAttribute('data-hrs') || ''; hh.focus(); if (hh.select) hh.select();
+    renumber(); recalc(); form.dispatchEvent(new Event('input'));
+  });
   tasks.addEventListener('click', function (e) {
     var b = e.target.closest('[data-remove]'); if (!b) return;
     var t = b.closest('.task'); if (tasks.children.length > 1) { t.remove(); renumber(); recalc(); }
