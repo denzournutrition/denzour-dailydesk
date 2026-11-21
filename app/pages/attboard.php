@@ -19,10 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin) {
         $t = (string)($_POST['start'] ?? '');
         if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t)) { set_setting('att_start_time', $t); }
         set_setting('att_grace', (string)max(0, min(240, (int)($_POST['grace'] ?? 15))));
-        set_setting('att_lunch', (string)max(0, min(240, (int)($_POST['lunch'] ?? 45))));
-        set_setting('att_tea', (string)max(0, min(240, (int)($_POST['tea'] ?? 30))));
+        set_setting('att_lunch', (string)max(0, min(240, (int)($_POST['lunch'] ?? 30))));
+        set_setting('att_tea', (string)max(0, min(240, (int)($_POST['tea'] ?? 15))));
         if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string)($_POST['remind'] ?? ''))) { set_setting('att_remind', (string)$_POST['remind']); }
-        set_setting('att_hours', (string)max(1, min(16, (float)str_replace(',', '.', (string)($_POST['hours'] ?? 8)))));
+        foreach (['end' => 'att_end', 'lunch_at' => 'att_lunch_at', 'tea_at' => 'att_tea_at'] as $f => $key) {
+            if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string)($_POST[$f] ?? ''))) { set_setting($key, (string)$_POST[$f]); }
+        }
+        set_setting('att_hours', (string)max(1, min(16, (float)str_replace(',', '.', (string)($_POST['hours'] ?? 8.25)))));
         flash('success', 'Attendance rules saved. They apply from now on.');
     } elseif ($act === 'review') {
         $dec = ($_POST['decision'] ?? '') === 'ok' ? 'ok' : (($_POST['decision'] ?? '') === 'flag' ? 'flag' : '');
@@ -166,10 +169,13 @@ layout_head('Attendance');
   <div class="formgrid">
     <label class="field"><span>Work starts at</span><input type="time" name="start" value="<?= h($c['start']) ?>" required></label>
     <label class="field"><span>Grace before "late" (minutes)</span><input type="number" name="grace" min="0" max="240" value="<?= (int)$c['grace'] ?>"></label>
+    <label class="field"><span>Day ends at</span><input type="time" name="end" value="<?= h($c['end']) ?>"></label>
+    <label class="field"><span>Lunch starts at</span><input type="time" name="lunch_at" value="<?= h($c['lunch_at']) ?>"></label>
+    <label class="field"><span>Tea starts at</span><input type="time" name="tea_at" value="<?= h($c['tea_at']) ?>"></label>
     <label class="field"><span>Lunch allowed (minutes)</span><input type="number" name="lunch" min="0" max="240" value="<?= (int)$c['lunch'] ?>"></label>
     <label class="field"><span>Tea allowed in total (minutes)</span><input type="number" name="tea" min="0" max="240" value="<?= (int)$c['tea'] ?>"></label>
     <label class="field"><span>Remind to submit the daily report from</span><input type="time" name="remind" value="<?= h($c['remind']) ?>" required></label>
-    <label class="field"><span>Expected working hours a day</span><input type="number" name="hours" min="1" max="16" step="0.5" value="<?= h((string)$c['hours']) ?>"></label>
+    <label class="field"><span>Expected working hours a day</span><input type="number" name="hours" min="1" max="16" step="0.25" value="<?= h((string)$c['hours']) ?>"></label>
   </div>
   <p class="muted tiny">Weekly offs and holidays come from the Holidays page. Nothing is asked on those days.</p>
   <div class="actions"><button class="btn" type="submit">Save rules</button></div>

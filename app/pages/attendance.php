@@ -68,8 +68,8 @@ $ev = att_events([$uid], $from, $today);
 $seen = att_seen([$uid], $from, $today);
 $rs = att_reasons([$uid], $from, $today);
 $calc = [];
-foreach ($days as $d) { $calc[$d] = att_calc($ev[$uid][$d] ?? [], $seen[$uid][$d] ?? null, $d, $c); }
-$now = att_calc($ev[$uid][$today] ?? [], null, $today, $c);
+foreach ($days as $d) { $calc[$d] = att_apply_forgot(att_calc($ev[$uid][$d] ?? [], $seen[$uid][$d] ?? null, $d, $c), $rs[$uid][$d] ?? [], $d, $c); }
+$now = att_apply_forgot(att_calc($ev[$uid][$today] ?? [], null, $today, $c), $rs[$uid][$today] ?? [], $today, $c);
 $timeline = $ev[$uid][$today] ?? [];
 $labels = ['in' => 'Started work', 'lunch_start' => 'Lunch started', 'lunch_end' => 'Back from lunch', 'tea_start' => 'Tea break started', 'tea_end' => 'Back from tea', 'out' => 'Ended the day'];
 $stateTxt = ['not_in' => 'Not started', 'working' => 'Working', 'on_lunch' => 'On lunch break', 'on_tea' => 'On tea break', 'done' => 'Day ended'][$now['state']];

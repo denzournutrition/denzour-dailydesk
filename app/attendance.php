@@ -71,9 +71,12 @@ function att_cfg(): array
     return [
         'start' => preg_match('/^\d{2}:\d{2}$/', setting('att_start_time')) ? setting('att_start_time') : '10:00',
         'grace' => (int)setting('att_grace', '15'),
-        'lunch' => (int)setting('att_lunch', '45'),
-        'tea'   => (int)setting('att_tea', '30'),
-        'hours' => (float)setting('att_hours', '8'),
+        'lunch' => (int)setting('att_lunch', '30'),
+        'tea'   => (int)setting('att_tea', '15'),
+        'hours' => (float)setting('att_hours', '8.25'),
+        'end'   => preg_match('/^\d{2}:\d{2}$/', setting('att_end')) ? setting('att_end') : '19:00',
+        'lunch_at' => preg_match('/^\d{2}:\d{2}$/', setting('att_lunch_at')) ? setting('att_lunch_at') : '14:00',
+        'tea_at'   => preg_match('/^\d{2}:\d{2}$/', setting('att_tea_at')) ? setting('att_tea_at') : '17:00',
         'since' => setting('att_since', date('Y-m-d')),
         'remind' => preg_match('/^\d{2}:\d{2}$/', setting('att_remind')) ? setting('att_remind') : '17:00',
     ];
@@ -192,15 +195,46 @@ function att_calc(array $events, ?string $lastSeen, string $day, array $c): arra
 }
 
 /** Everything about attendance for a set of people over a date range. */
+const ATT_FORGOT = 'Forgot to log in (I was working)';
+
+/** "Forgot to log in": the day counts from the official start, with the fixed lunch and tea breaks taken off. */
+function att_apply_forgot(array $r, array $reasons, string $day, array $c): array
+{
+    $why = null;
+    foreach (['late', 'missing'] as $k) { if (isset($reasons[$k]) && $reasons[$k]['reason'] === ATT_FORGOT) { $why = $reasons[$k]; break; } }
+    if (!$why) { return $r; }
+    $start = $day . ' ' . $c['start'] . ':00';
+    $endPlan = $day . ' ' . $c['end'] . ':00';
+    $now = date('Y-m-d H:i:s');
+    $isToday = $day === today();
+    if ($isToday && $now < $start) { return $r; }
+    $end = $isToday ? min($now, $endPlan) : $endPlan;
+    if (!empty($why['claimed_out']) && !$isToday) { $end = min($endPlan, $day . ' ' . $why['claimed_out'] . ':00'); }
+    if ($r['in'] !== null && !$r['out_auto'] && $r['out'] !== null && $r['state'] === 'done' && !$isToday) { $end = max($r['out'], $end); }
+    $lunchAt = $day . ' ' . $c['lunch_at'] . ':00';
+    $teaAt = $day . ' ' . $c['tea_at'] . ':00';
+    $lunch = $r['lunch'] > 0 ? $r['lunch'] : ($end >= date('Y-m-d H:i:s', strtotime($lunchAt) + $c['lunch'] * 60) ? $c['lunch'] : 0);
+    $tea = $r['tea'] > 0 ? $r['tea'] : ($end >= date('Y-m-d H:i:s', strtotime($teaAt) + $c['tea'] * 60) ? $c['tea'] : 0);
+    $r['in'] = $start; $r['late'] = 0; $r['is_late'] = false;
+    if ($r['state'] !== 'on_lunch' && $r['state'] !== 'on_tea') { $r['out'] = ($isToday ? null : $end); }
+    $r['out_auto'] = false; $r['incomplete'] = false; $r['adjusted'] = true;
+    if ($r['state'] === 'not_in') { $r['state'] = $isToday ? 'working' : 'done'; }
+    $r['lunch'] = $lunch; $r['tea'] = $tea; $r['teas'] = $tea > 0 ? max(1, $r['teas']) : $r['teas'];
+    $gross = max(0, (int)round((strtotime($end) - strtotime($start)) / 60));
+    $r['gross'] = $gross; $r['net'] = max(0, $gross - $lunch - $tea);
+    return $r;
+}
+
 function att_data(array $uids, string $from, string $to): array
 {
     $c = att_cfg();
     $ev = att_events($uids, $from, $to);
     $seen = att_seen($uids, $from, $to);
+    $rs = att_reasons($uids, $from, $to);
     $out = [];
     foreach ($uids as $uid) {
         for ($d = $from; $d <= $to; $d = add_days($d, 1)) {
-            $out[$uid][$d] = att_calc($ev[$uid][$d] ?? [], $seen[$uid][$d] ?? null, $d, $c);
+            $out[$uid][$d] = att_apply_forgot(att_calc($ev[$uid][$d] ?? [], $seen[$uid][$d] ?? null, $d, $c), $rs[$uid][$d] ?? [], $d, $c);
         }
     }
     return $out;
