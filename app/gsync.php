@@ -76,7 +76,10 @@ function gsync_run(int $id): string
         @set_time_limit(120);
         $tmp = gsync_fetch((string)$l['sheet_id']);
         $name = ($l['label'] !== '' ? $l['label'] : 'Google Sheet') . '.xlsx';
-        if ($l['kind'] === 'sales') {
+        if ($l['kind'] === 'targets') {
+            $month = preg_match('/^\d{4}-\d{2}$/', (string)($l['month'] ?? '')) ? (string)$l['month'] : substr(today(), 0, 7);
+            $msg = track_import($tmp, $month);
+        } elseif ($l['kind'] === 'sales') {
             $uid = (int)$l['user_id'];
             if (!$uid) { throw new RuntimeException('Choose which sales person this sheet belongs to.'); }
             $from = date('Y-m-d', strtotime('-35 days'));

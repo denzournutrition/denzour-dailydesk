@@ -3,7 +3,7 @@ defined('DD') or exit;
 
 $pdo = db();
 $self = url('gsync');
-$kinds = ['sales' => 'Sales (orders and calls)', 'ecom' => 'E-commerce (Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon, Flipkart)'];
+$kinds = ['targets' => 'Targets and daily tracker (everyone)', 'sales' => 'Sales (orders and calls)', 'ecom' => 'E-commerce (Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon, Flipkart)'];
 $people = $pdo->query("SELECT id, name FROM users WHERE role = 'employee' AND active = 1 ORDER BY name")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -12,15 +12,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($act === 'add') {
         $url = trim((string)($_POST['url'] ?? ''));
         $sid = gsync_sheet_id($url);
-        $kind = isset($kinds[$_POST['kind'] ?? '']) ? (string)$_POST['kind'] : 'sales';
+        $kind = isset($kinds[$_POST['kind'] ?? '']) ? (string)$_POST['kind'] : 'targets';
+        $tmonth = preg_match('/^\d{4}-\d{2}$/', (string)($_POST['month'] ?? '')) ? (string)$_POST['month'] : '';
         $uid = (int)($_POST['user_id'] ?? 0);
         if ($sid === '') { flash('error', 'That does not look like a Google Sheets link. Copy it from the browser address bar.'); }
         elseif ($kind === 'sales' && !$uid) { flash('error', 'Choose the sales person this sheet belongs to.'); }
         else {
             $every = in_array((int)($_POST['every'] ?? 15), [5, 15, 30, 60], true) ? (int)$_POST['every'] : 15;
             $label = mb_substr(trim((string)($_POST['label'] ?? '')), 0, 80);
-            $pdo->prepare('INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at) VALUES (?,?,?,?,?,?,?)')
-                ->execute([$label, $kind, $kind === 'sales' ? $uid : 0, $sid, mb_substr($url, 0, 400), $every, date('Y-m-d H:i:s')]);
+            $pdo->prepare('INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at, month) VALUES (?,?,?,?,?,?,?,?)')
+                ->execute([$label, $kind, $kind === 'sales' ? $uid : 0, $sid, mb_substr($url, 0, 400), $every, date('Y-m-d H:i:s'), $kind === 'targets' ? $tmonth : '']);
             $id = (int)$pdo->lastInsertId();
             $m = gsync_run($id);
             flash($pdo->query('SELECT last_ok FROM gsync_links WHERE id = ' . $id)->fetchColumn() ? 'success' : 'error', 'Connected. ' . $m);
@@ -57,7 +58,7 @@ layout_head('Google Sheets');
     <?php foreach ($links as $l): ?>
       <tr class="<?= $l['enabled'] ? '' : 'is-dim' ?>">
         <td><strong><?= h($l['label'] !== '' ? $l['label'] : 'Google Sheet') ?></strong><?= $l['who'] ? '<br><span class="muted tiny">' . h($l['who']) . '</span>' : '' ?></td>
-        <td class="tiny"><?= $l['kind'] === 'ecom' ? 'E-commerce' : 'Sales' ?></td>
+        <td class="tiny"><?= $l['kind'] === 'ecom' ? 'E-commerce' : ($l['kind'] === 'targets' ? 'Targets' : 'Sales') ?></td>
         <td class="tiny"><?= (int)$l['every_min'] ?> min</td>
         <td class="tiny"><?= $l['last_run'] !== '' ? h(date('d M, g:i a', strtotime($l['last_run']))) : 'Not yet' ?></td>
         <td class="tiny"><?= $l['last_run'] === '' ? '' : ($l['last_ok'] ? '<span class="chip chip--ok">OK</span> ' : '<span class="chip chip--warn">Problem</span> ') ?><?= h($l['last_msg']) ?></td>
@@ -86,10 +87,12 @@ layout_head('Google Sheets');
     <label class="field"><span>Name <em>optional</em></span><input type="text" name="label" maxlength="80" placeholder="e.g. Riya sales sheet"></label>
     <label class="field"><span>Type</span><select name="kind" id="gskind"><?php foreach ($kinds as $k => $t): ?><option value="<?= h($k) ?>"><?= h($t) ?></option><?php endforeach; ?></select></label>
     <label class="field"><span>Sales person <em>for Sales type</em></span><select name="user_id"><option value="">Choose…</option><?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>"><?= h($pp['name']) ?></option><?php endforeach; ?></select></label>
+    <label class="field"><span>Month <em>for Targets type</em></span><input type="month" name="month" placeholder="Leave empty = current month"></label>
     <label class="field"><span>Refresh every</span><select name="every"><option value="5">5 minutes</option><option value="15" selected>15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
   </div>
   <div class="actions"><button class="btn" type="submit">Connect and sync now</button></div>
-  <p class="muted tiny">The sheet needs the same columns as the files you already upload (the Sales desk and E-commerce desk formats). Sales sheets re-read the last 35 days; rows already saved are not duplicated.</p>
+  <p class="muted tiny"><strong>Targets and daily tracker:</strong> one sheet for the whole team. A <em>Daily Tracker</em> tab with rows <em>Day 1, Day 2…</em> and columns like <em>Ravi Achieved</em> and <em>Ravi Daily Target</em> (people and platforms), plus an optional <em>Summary</em> tab with Monthly Target. Each person then sees only their own target; admin and CEO see everyone. Leave Month empty to use the current month automatically.</p>
+  <p class="muted tiny">For Sales and E-commerce types the sheet needs the same columns as the files you already upload (the Sales desk and E-commerce desk formats). Sales sheets re-read the last 35 days; rows already saved are not duplicated.</p>
 </form>
 
 <section class="card card--wide">

@@ -66,6 +66,14 @@ layout_head('Sales overview');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Marketplace ad spend</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas($tot['mp_sales'], $tot['spend'])) ?> on marketplaces</span></div>
 </div>
 
+<?php $td = track_load($month); if ($td['ents']): $tt = $td['tot']; ?>
+<section class="card">
+  <div class="card__h"><h2>Targets and pace</h2><a class="btn btn--ghost btn--sm" href="<?= h(url('track', ['month' => $month])) ?>">Open full view</a></div>
+  <p class="muted" style="margin:0 0 12px"><strong><?= h(inr_short($tt['achieved'])) ?></strong> achieved of <?= h(inr_short($tt['monthly'])) ?> (<?= (int)round($tt['ach_pct']) ?>%) · should be at <strong><?= h(inr_short($tt['expected'])) ?></strong> <?= h(track_asof_text($td)) ?> · <span class="<?= $tt['gap'] >= 0 ? 'good' : 'bad' ?>"><?= $tt['gap'] >= 0 ? 'ahead by ' : 'behind by ' ?><?= h(inr_short(abs($tt['gap']))) ?></span> · needs <?= h(inr_short($tt['need_day'])) ?> a day</p>
+  <?php track_team_table($td, 'person', true); track_team_table($td, 'platform', true); ?>
+</section>
+<?php endif; ?>
+
 <?php foreach (['online' => 'Online sales, by platform', 'offline' => 'Offline sales'] as $kind => $title): $rs = array_values(array_filter($cur['rows'], fn($r) => $r['kind'] === $kind)); $sub = $tot[$kind]; ?>
 <section class="card">
   <div class="card__h"><h2><?= h($title) ?></h2><strong><?= h(inr($sub)) ?></strong></div>

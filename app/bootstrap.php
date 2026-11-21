@@ -9,6 +9,7 @@ require __DIR__ . '/sales.php';
 require __DIR__ . '/attendance.php';
 require __DIR__ . '/ecom.php';
 require __DIR__ . '/gsync.php';
+require __DIR__ . '/track.php';
 require __DIR__ . '/profile.php';
 require __DIR__ . '/channels.php';
 
@@ -133,6 +134,7 @@ function migrate(PDO $pdo): void
     sales_migrate($pdo);
     ecom_migrate($pdo);
     gsync_migrate($pdo);
+    track_migrate($pdo);
     profile_migrate($pdo);
     channels_migrate($pdo);
     att_migrate($pdo);
@@ -375,6 +377,9 @@ function layout_head(string $title, string $bodyClass = ''): void
         if ($u['role'] === 'employee') {
             $my[] = ['attendance', 'My day', 'coffee'];
         }
+        if ($u['role'] === 'employee' && track_has($u)) {
+            $my[] = ['track', 'My target', 'target'];
+        }
         if (can_enter_channels($u)) {
             $my[] = ['channels', 'Other sales', 'bag'];
         }
@@ -396,6 +401,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $boards[] = ['exports', 'Downloads', 'download'];
         }
         if (in_array($u['role'], ['admin', 'ceo'], true)) {
+            $boards[] = ['track', 'Targets', 'target'];
             $boards[] = ['team', 'Team', 'users'];
         }
         if ($my) {
@@ -463,6 +469,7 @@ function layout_head(string $title, string $bodyClass = ''): void
     <div class="hello__t"><span class="hello__eye"><?= h(fmt_date(today(), true)) ?></span><h2><?= h($greet) ?>, <?= h($first) ?></h2><p><?= h($u['designation'] ?: 'Team') ?> · Denzour Nutrition</p></div>
     <div class="hello__a"><a class="btn btn--sm" href="<?= h(url('report')) ?>"><?= icon('edit') ?>Daily report</a><a class="btn btn--ghost btn--sm" href="<?= h(url('attendance')) ?>"><?= icon('coffee') ?>My day</a></div>
   </section>
+  <?php track_strip($u); ?>
 <?php endif; ?>
 <?php foreach (take_flash() as [$type, $msg]): ?>
   <div class="flash flash--<?= h($type) ?>" role="status"><?= h($msg) ?></div>

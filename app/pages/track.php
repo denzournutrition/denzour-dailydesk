@@ -1,0 +1,83 @@
+<?php
+defined('DD') or exit;
+
+$u = user();
+$pdo = db();
+$isAll = in_array($u['role'], ['admin', 'ceo'], true);
+$month = s_month($_GET['month'] ?? $_POST['month'] ?? null);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $u['role'] === 'admin') {
+    csrf_verify();
+    if (($_POST['action'] ?? '') === 'map') {
+        $up = $pdo->prepare('INSERT INTO track_map (name_key, user_id) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET user_id = excluded.user_id');
+        foreach ((array)($_POST['map'] ?? []) as $key => $uid) { $up->execute([track_key((string)$key), (int)$uid]); }
+        flash('success', 'Saved. Each person now sees their own target.');
+    }
+    redirect(url('track', ['month' => $month]));
+}
+
+$d = track_load($month);
+$who = (string)($_GET['who'] ?? '');
+$sel = ($isAll && $who !== '' && isset($d['ents'][$who])) ? $d['ents'][$who] : null;
+$mine = $isAll ? null : track_for_user($d, (int)$u['id']);
+$people = $pdo->query("SELECT id, name FROM users WHERE active = 1 AND role IN ('employee','admin') ORDER BY name")->fetchAll();
+$mlabel = date('F Y', strtotime($month . '-01'));
+
+layout_head('Targets');
+?>
+<div class="pagehead">
+  <div><h1><?= $isAll ? 'Targets and pace' : 'My target' ?></h1>
+    <p class="muted"><?= $isAll ? 'Everyone\'s monthly target, what they have achieved, and whether they are on pace. Read from the connected Google Sheet.' : 'Your monthly target, what you have achieved, and the pace you need to hit it.' ?></p></div>
+  <?php if ($u['role'] === 'admin'): ?><a class="btn btn--ghost btn--sm" href="<?= h(url('gsync')) ?>"><?= icon('upload') ?>Google Sheet</a><?php endif; ?>
+</div>
+<?php s_month_filter('track', $month); ?>
+
+<?php if (!$d['ents']): ?>
+  <section class="card"><p class="muted" style="margin:0">No targets for <?= h($mlabel) ?> yet.
+    <?php if ($u['role'] === 'admin'): ?>Open <a href="<?= h(url('gsync')) ?>">Google Sheets</a>, choose <strong>Targets and daily tracker</strong>, and paste the sheet link.<?php else: ?>Your admin has not connected the targets sheet yet.<?php endif; ?></p></section>
+
+<?php elseif (!$isAll): ?>
+  <?php if (!$mine): ?>
+    <section class="card"><p class="muted" style="margin:0">No target is linked to your name for <?= h($mlabel) ?>. Ask your admin to link it (Targets → Link names).</p></section>
+  <?php else: track_hero($mine, $d, $u['name']); ?>
+    <section class="card"><div class="card__h"><h2>Day by day</h2><span class="muted tiny">Bars = what you did · dashed line = daily target</span></div><?= track_chart($mine) ?></section>
+    <section class="card"><div class="card__h"><h2>Daily tracker</h2></div><?php track_daily_table($mine, $d); ?></section>
+  <?php endif; ?>
+
+<?php elseif ($sel): ?>
+  <p><a class="btn btn--ghost btn--sm" href="<?= h(url('track', ['month' => $month])) ?>">‹ Everyone</a></p>
+  <?php track_hero($sel, $d); ?>
+  <section class="card"><div class="card__h"><h2>Day by day</h2><span class="muted tiny">Bars = achieved · dashed line = daily target</span></div><?= track_chart($sel) ?></section>
+  <section class="card"><div class="card__h"><h2>Daily tracker</h2></div><?php track_daily_table($sel, $d); ?></section>
+
+<?php else: $t = $d['tot']; ?>
+  <div class="kpis kpis--5">
+    <div class="kpi"><div class="kpi__h"><span>Total target</span></div><div class="kpi__v num"><?= h(inr_short($t['monthly'])) ?></div><div class="kpi__s"><?= h($mlabel) ?></div></div>
+    <div class="kpi"><div class="kpi__h"><span>Achieved</span></div><div class="kpi__v num"><?= h(inr_short($t['achieved'])) ?></div><div class="kpi__s"><?= (int)round($t['ach_pct']) ?>% of target</div></div>
+    <div class="kpi <?= $t['gap'] < 0 ? 'kpi--bad' : '' ?>"><div class="kpi__h"><span><?= $t['gap'] >= 0 ? 'Ahead of pace' : 'Behind pace' ?></span></div><div class="kpi__v num"><?= h(inr_short(abs($t['gap']))) ?></div><div class="kpi__s">should be <?= h(inr_short($t['expected'])) ?> <?= h(track_asof_text($d)) ?></div></div>
+    <div class="kpi"><div class="kpi__h"><span>Needed per day</span></div><div class="kpi__v num"><?= h(inr_short($t['need_day'])) ?></div><div class="kpi__s"><?= h(inr_short($t['remaining'])) ?> still to go</div></div>
+    <div class="kpi"><div class="kpi__h"><span>Projected month end</span></div><div class="kpi__v num"><?= h(inr_short($t['projected'])) ?></div><div class="kpi__s">at the current rate</div></div>
+  </div>
+  <section class="card"><div class="card__h"><h2>People</h2><span class="muted tiny">Click a name for the daily tracker</span></div><?php track_team_table($d, 'person'); ?></section>
+  <section class="card"><div class="card__h"><h2>Platforms</h2></div><?php track_team_table($d, 'platform'); ?></section>
+  <p class="muted tiny">The bar line marks where each person should be today. "Ahead / behind" compares their total with the sum of their daily targets up to <?= h(track_asof_text($d)) ?>.<?= $d['synced'] !== '' ? ' Last read from the sheet ' . h(date('j M, g:i a', strtotime($d['synced']))) . '.' : '' ?></p>
+
+  <?php if ($u['role'] === 'admin'): $persons = array_filter($d['ents'], fn($e) => $e['kind'] === 'person'); ?>
+  <details class="card">
+    <summary><strong>Link names to employees</strong> <span class="muted tiny">so each person sees only their own target</span></summary>
+    <form method="post" action="<?= h(url('track', ['month' => $month])) ?>" style="margin-top:14px">
+      <?= csrf_field() ?><input type="hidden" name="action" value="map"><input type="hidden" name="month" value="<?= h($month) ?>">
+      <div class="formgrid">
+        <?php foreach ($persons as $e): ?>
+          <label class="field"><span>Sheet name: <?= h($e['name']) ?></span>
+            <select name="map[<?= h(track_key($e['name'])) ?>]"><option value="0">Not linked</option>
+              <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?>
+            </select></label>
+        <?php endforeach; ?>
+      </div>
+      <div class="actions"><button class="btn" type="submit">Save links</button></div>
+    </form>
+  </details>
+  <?php endif; ?>
+<?php endif; ?>
+<?php layout_foot();
