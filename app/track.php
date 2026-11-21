@@ -19,6 +19,10 @@ function track_migrate(PDO $pdo): void
         PRIMARY KEY (month, name, day))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_map (name_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_cls (name_key TEXT PRIMARY KEY, channel TEXT NOT NULL DEFAULT 'none')");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS track_src (name_key TEXT PRIMARY KEY, src TEXT NOT NULL DEFAULT 'sheet')");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS track_manual (
+        month TEXT NOT NULL, name TEXT NOT NULL, day INTEGER NOT NULL, achieved REAL NOT NULL DEFAULT 0, user_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (month, name, day))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_meta (month TEXT PRIMARY KEY, synced_at TEXT NOT NULL DEFAULT '')");
     $cols = array_column($pdo->query('PRAGMA table_info(gsync_links)')->fetchAll(), 'name');
     if ($cols && !in_array('month', $cols, true)) {
@@ -181,7 +185,80 @@ function track_saved_user(string $name): int
     return (int)($st->fetchColumn() ?: 0);
 }
 
+/** Where a name's daily figures come from: 'sheet' (default), 'auto' (DailyDesk's own data) or 'manual' (the employee types them). */
+function track_src_of(string $name): string
+{
+    static $m = null;
+    if ($m === null) { $m = []; foreach (db()->query('SELECT name_key, src FROM track_src') as $r) { $m[$r['name_key']] = $r['src']; } }
+    $v = $m[track_key($name)] ?? 'sheet';
+    return in_array($v, ['auto', 'manual'], true) ? $v : 'sheet';
+}
+
+/** Daily sales DailyDesk already knows about: [day number => amount]. */
+function track_auto_series(string $name, string $kind, int $uid, string $month): array
+{
+    $pdo = db();
+    [$from, $to] = s_month_range($month);
+    $out = [];
+    $add = function (string $date, float $v) use (&$out) { $d = (int)substr($date, 8, 2); $out[$d] = ($out[$d] ?? 0.0) + $v; };
+    if ($kind === 'person') {
+        if (!$uid) { return []; }
+        $st = $pdo->prepare('SELECT order_date d, SUM(amount) s FROM sales_orders WHERE user_id = ? AND order_date BETWEEN ? AND ? GROUP BY order_date'); $st->execute([$uid, $from, $to]);
+        foreach ($st as $r) { $add($r['d'], (float)$r['s']); }
+        return $out;
+    }
+    $pk = ecom_platform_key($name);
+    if ($pk !== '') {
+        $st = $pdo->prepare('SELECT day d, SUM(sales) s FROM ecom_daily WHERE platform = ? AND day BETWEEN ? AND ? GROUP BY day'); $st->execute([$pk, $from, $to]);
+        foreach ($st as $r) { $add($r['d'], (float)$r['s']); }
+        return $out;
+    }
+    if (stripos($name, 'shopify') !== false || stripos($name, 'website') !== false) {
+        $st = $pdo->prepare('SELECT d.day d, SUM(d.sales) s FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.web = 1 AND d.day BETWEEN ? AND ? GROUP BY d.day'); $st->execute([$from, $to]);
+        foreach ($st as $r) { $add($r['d'], (float)$r['s']); }
+        if (!$out) {
+            $st = $pdo->prepare('SELECT order_date d, SUM(amount) s FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date'); $st->execute([$from, $to]);
+            foreach ($st as $r) { $add($r['d'], (float)$r['s']); }
+        }
+    }
+    return $out;
+}
+
+/** Applies the chosen source on top of what the sheet gave for one name. */
+function track_overlay(string $month, string $name, string $kind, int $uid, array $days, float $monthly, int $dim): array
+{
+    $src = track_src_of($name);
+    $today = today();
+    $fill = function (int $d) use (&$days, $monthly, $dim) {
+        if (!isset($days[$d])) { $days[$d] = ['a' => null, 't' => $dim > 0 ? $monthly / $dim : 0.0]; }
+    };
+    if ($src === 'manual') {
+        $st = db()->prepare('SELECT day, achieved FROM track_manual WHERE month = ? AND name = ?'); $st->execute([$month, $name]);
+        foreach ($st as $r) { $fill((int)$r['day']); $days[(int)$r['day']]['a'] = (float)$r['achieved']; }
+    } elseif ($src === 'auto') {
+        $series = track_auto_series($name, $kind, $uid, $month);
+        if ($series) {
+            for ($d = 1; $d <= $dim; $d++) {
+                $fill($d);
+                $date = $month . '-' . str_pad((string)$d, 2, '0', STR_PAD_LEFT);
+                if (isset($series[$d])) { $days[$d]['a'] = $series[$d]; }
+                elseif ($date < $today) { $days[$d]['a'] = 0.0; }
+                else { $days[$d]['a'] = null; }
+            }
+        }
+    }
+    ksort($days);
+    return $days;
+}
+
 function track_load(string $month): array
+{
+    static $cache = [];
+    if (isset($cache[$month])) { return $cache[$month]; }
+    return $cache[$month] = track_load_raw($month);
+}
+
+function track_load_raw(string $month): array
 {
     $pdo = db();
     $dim = (int)date('t', strtotime($month . '-01'));
@@ -194,10 +271,16 @@ function track_load(string $month): array
     foreach ($st->fetchAll() as $r) {
         if (isset($ents[$r['name']])) { $ents[$r['name']]['days'][(int)$r['day']] = ['a' => $r['achieved'] === null ? null : (float)$r['achieved'], 't' => (float)$r['target']]; }
     }
+    $users = $pdo->query("SELECT id, name FROM users WHERE active = 1 AND role IN ('employee','admin')")->fetchAll();
+    foreach ($ents as $nm => &$e0) {
+        $e0['user_id'] = $e0['kind'] === 'person' ? track_user_for($nm, $users) : track_saved_user($nm);
+        $e0['src'] = track_src_of($nm);
+        $e0['days'] = track_overlay($month, $nm, $e0['kind'], (int)$e0['user_id'], $e0['days'], $e0['monthly'], $dim);
+    }
+    unset($e0);
     // the last day anybody has numbers for (not in the future)
     $asof = 0;
     foreach ($ents as $e) { foreach ($e['days'] as $d => $x) { if ($x['a'] !== null && $d <= max($todayDay, 0) && $d > $asof) { $asof = $d; } } }
-    $users = $pdo->query("SELECT id, name FROM users WHERE active = 1 AND role IN ('employee','admin')")->fetchAll();
     foreach ($ents as $nm => &$e) {
         $ach = 0.0; $exp = 0.0;
         foreach ($e['days'] as $d => $x) { if ($x['a'] !== null) { $ach += $x['a']; } if ($d <= $asof) { $exp += $x['t']; } }
@@ -209,7 +292,6 @@ function track_load(string $month): array
         $left = max(1, $dim - $asof);
         $e['need_day'] = $e['monthly'] > $ach ? $e['remaining'] / $left : 0.0;
         $e['projected'] = $asof > 0 ? $ach / $asof * $dim : 0.0;
-        $e['user_id'] = $e['kind'] === 'person' ? track_user_for($nm, $users) : track_saved_user($nm);
         $e['channel'] = track_channel($nm, $e['kind']);
         if ($e['monthly'] > 0 && $ach >= $e['monthly']) { $e['state'] = 'hit'; }
         elseif ($asof === 0) { $e['state'] = 'none'; }
@@ -404,29 +486,24 @@ function track_has(array $u): bool
     return $r[$id];
 }
 
-/** Tracker achieved figures that fall inside a date range, for names tagged Online / Offline: [name_key => ['label','kind','sales']]. */
+/** Tracker achieved figures that fall inside a date range, for names tagged Online / Offline: [name_key => ['label','kind','sales','days']]. */
 function track_sales_between(string $from, string $to): array
 {
-    $pdo = db();
-    $cls = track_classes();
     $out = [];
     $m = substr($from, 0, 7);
     $end = substr($to, 0, 7);
     for ($guard = 0; $m <= $end && $guard < 36; $guard++, $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
-        $kinds = [];
-        $st = $pdo->prepare('SELECT name, kind FROM track_targets WHERE month = ?'); $st->execute([$m]);
-        foreach ($st as $r) { $kinds[$r['name']] = $r['kind']; }
-        $st = $pdo->prepare('SELECT name, day, achieved FROM track_daily WHERE month = ? AND achieved IS NOT NULL'); $st->execute([$m]);
-        foreach ($st as $r) {
-            if (!isset($kinds[$r['name']])) { continue; }
-            $ch = track_channel($r['name'], $kinds[$r['name']]);
-            if ($ch === 'none') { continue; }
-            $date = $m . '-' . str_pad((string)$r['day'], 2, '0', STR_PAD_LEFT);
-            if ($date < $from || $date > $to) { continue; }
-            $k = track_key($r['name']);
-            $out[$k] ??= ['label' => $r['name'], 'kind' => $ch, 'sales' => 0.0, 'days' => []];
-            $out[$k]['sales'] += (float)$r['achieved'];
-            $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$r['achieved'];
+        foreach (track_load($m)['ents'] as $e) {
+            if ($e['channel'] === 'none') { continue; }
+            foreach ($e['days'] as $day => $x) {
+                if ($x['a'] === null) { continue; }
+                $date = $m . '-' . str_pad((string)$day, 2, '0', STR_PAD_LEFT);
+                if ($date < $from || $date > $to) { continue; }
+                $k = track_key($e['name']);
+                $out[$k] ??= ['label' => $e['name'], 'kind' => $e['channel'], 'sales' => 0.0, 'days' => []];
+                $out[$k]['sales'] += (float)$x['a'];
+                $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$x['a'];
+            }
         }
     }
     return $out;
