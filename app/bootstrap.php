@@ -413,7 +413,7 @@ function layout_head(string $title, string $bodyClass = ''): void
 <meta name="robots" content="noindex, nofollow">
 <title><?= h($title) ?> · <?= h(cfg('app_name')) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&display=swap">
 <link rel="icon" type="image/png" href="<?= h(asset('logo-mark.png')) ?>">
 <link rel="stylesheet" href="<?= h(asset('style.css')) ?>">
 </head>

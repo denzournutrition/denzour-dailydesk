@@ -157,7 +157,7 @@ function area_chart(array $days, array $byDay): string
     $iw = $W - $pl - $pr; $ih = $H - $pb - $pt;
     $x = fn($i) => $pl + ($n > 1 ? $i * $iw / ($n - 1) : $iw / 2);
     $y = fn($v) => $pt + $ih * (1 - $v / $max);
-    $o = '<svg class="chart" viewBox="0 0 ' . $W . ' ' . $H . '" role="img" aria-label="Hours logged per day" preserveAspectRatio="xMidYMid meet"><defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2563eb" stop-opacity=".22"/><stop offset="1" stop-color="#2563eb" stop-opacity="0"/></linearGradient></defs>';
+    $o = '<svg class="chart" viewBox="0 0 ' . $W . ' ' . $H . '" role="img" aria-label="Hours logged per day" preserveAspectRatio="xMidYMid meet"><defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F6F55" stop-opacity=".22"/><stop offset="1" stop-color="#2F6F55" stop-opacity="0"/></linearGradient></defs>';
     foreach ([0, .25, .5, .75, 1] as $g) {
         $yy = $pt + $ih * (1 - $g);
         $o .= '<line x1="' . $pl . '" x2="' . ($W - $pr) . '" y1="' . $yy . '" y2="' . $yy . '" class="grid"/><text x="' . ($pl - 8) . '" y="' . ($yy + 4) . '" text-anchor="end" class="axis">' . fmt_hours($max * $g) . '</text>';
