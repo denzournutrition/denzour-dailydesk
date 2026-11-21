@@ -89,6 +89,24 @@ function ceo_sales(string $from, string $to): array
             ['key' => 'sub:others', 'label' => 'Others (rest of Shopify)', 'sales' => $others, 'orders' => null],
         ]];
     array_unshift($rows, $shopify);
+    // Tracker sheet sales (names tagged Online / Offline). A row that already has real sales keeps them; the tracker fills only what is empty, so nothing is counted twice.
+    $used = [];
+    foreach (track_sales_between($from, $to) as $tk => $t) {
+        if ($t['sales'] <= 0) { continue; }
+        $hit = null;
+        foreach ($rows as $i => $r) {
+            $rk = track_key($r['label']);
+            if ($rk === $tk || str_starts_with($rk, $tk)) { $hit = $i; break; }
+        }
+        if ($hit !== null) {
+            if ($rows[$hit]['sales'] <= 0) { $rows[$hit]['sales'] = $t['sales']; $rows[$hit]['kind'] = $t['kind']; $rows[$hit]['src'] = 'tracker'; $used[$tk] = $t['days']; }
+        } else {
+            $rows[] = ['key' => 't:' . $tk, 'label' => $t['label'], 'group' => $t['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $t['kind'], 'sales' => $t['sales'], 'orders' => 0,
+                'spend' => 0.0, 'days' => count($t['days']), 'last' => max(array_keys($t['days'])), 'platform' => '', 'src' => 'tracker'];
+            $used[$tk] = $t['days'];
+        }
+    }
+    track_used($used);
     $tot = ['online' => 0.0, 'offline' => 0.0, 'orders' => 0, 'spend' => 0.0, 'mp_sales' => 0.0];
     foreach ($rows as $r) {
         $tot[$r['kind']] += $r['sales'];
@@ -114,6 +132,7 @@ function ceo_daily(string $from, string $to, bool $webEntered): array
         $st = $pdo->prepare('SELECT order_date day, SUM(amount) s FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date'); $st->execute([$from, $to]);
         foreach ($st as $r) { $add($r['day'], 'online', (float)$r['s']); }
     }
+    foreach (track_used() as $tk => $days) { foreach ($days as $date => $v) { if ($date >= $from && $date <= $to) { $kind = track_classes()[$tk] ?? 'online'; $add($date, $kind === 'offline' ? 'offline' : 'online', (float)$v); } } }
     krsort($d);
     return $d;
 }

@@ -83,7 +83,7 @@ layout_head('Sales overview');
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Share</th><th class="r">Orders</th><?php if ($kind === 'online'): ?><th class="r hm">Ad spend</th><th class="r hm">ROAS</th><?php endif; ?><th class="r">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?></th><th class="r hm">Last data</th></tr></thead><tbody>
   <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; $isSh = $r['key'] === 'shopify'; ?>
     <tr<?= $isSh ? ' style="background:var(--soft)"' : '' ?>>
-      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?></td>
+      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?><?= !empty($r['src']) ? ' <span class="chip" title="From the Targets Google Sheet">Sheet</span>' : '' ?></td>
       <td class="r"><strong><?= h(inr($r['sales'])) ?></strong></td>
       <td class="r"><?= $share($r['sales'], $sub) ?>%</td>
       <td class="r"><?= number_format($r['orders']) ?></td>

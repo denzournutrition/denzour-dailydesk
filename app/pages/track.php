@@ -11,6 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $u['role'] === 'admin') {
     if (($_POST['action'] ?? '') === 'map') {
         $up = $pdo->prepare('INSERT INTO track_map (name_key, user_id) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET user_id = excluded.user_id');
         foreach ((array)($_POST['map'] ?? []) as $key => $uid) { $up->execute([track_key((string)$key), (int)$uid]); }
+        $uc = $pdo->prepare('INSERT INTO track_cls (name_key, channel) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET channel = excluded.channel');
+        foreach ((array)($_POST['cls'] ?? []) as $key => $ch) { $uc->execute([track_key((string)$key), in_array($ch, ['online', 'offline'], true) ? $ch : 'none']); }
         flash('success', 'Saved. Each person now sees their own target.');
     }
     redirect(url('track', ['month' => $month]));
@@ -52,7 +54,7 @@ layout_head('Targets');
 
 <?php else: $t = $d['tot']; ?>
   <div class="kpis kpis--5">
-    <div class="kpi"><div class="kpi__h"><span>Total target</span></div><div class="kpi__v num"><?= h(inr_short($t['monthly'])) ?></div><div class="kpi__s"><?= h($mlabel) ?></div></div>
+    <div class="kpi"><div class="kpi__h"><span>Total target</span></div><div class="kpi__v num"><?= h(inr_short($t['monthly'])) ?></div><div class="kpi__s">Online + Offline, counted once</div></div>
     <div class="kpi"><div class="kpi__h"><span>Achieved</span></div><div class="kpi__v num"><?= h(inr_short($t['achieved'])) ?></div><div class="kpi__s"><?= (int)round($t['ach_pct']) ?>% of target</div></div>
     <div class="kpi <?= $t['gap'] < 0 ? 'kpi--bad' : '' ?>"><div class="kpi__h"><span><?= $t['gap'] >= 0 ? 'Ahead of pace' : 'Behind pace' ?></span></div><div class="kpi__v num"><?= h(inr_short(abs($t['gap']))) ?></div><div class="kpi__s">should be <?= h(inr_short($t['expected'])) ?> <?= h(track_asof_text($d)) ?></div></div>
     <div class="kpi"><div class="kpi__h"><span>Needed per day</span></div><div class="kpi__v num"><?= h(inr_short($t['need_day'])) ?></div><div class="kpi__s"><?= h(inr_short($t['remaining'])) ?> still to go</div></div>
@@ -62,20 +64,21 @@ layout_head('Targets');
   <section class="card"><div class="card__h"><h2>Platforms</h2></div><?php track_team_table($d, 'platform'); ?></section>
   <p class="muted tiny">The bar line marks where each person should be today. "Ahead / behind" compares their total with the sum of their daily targets up to <?= h(track_asof_text($d)) ?>.<?= $d['synced'] !== '' ? ' Last read from the sheet ' . h(date('j M, g:i a', strtotime($d['synced']))) . '.' : '' ?></p>
 
-  <?php if ($u['role'] === 'admin'): $persons = array_filter($d['ents'], fn($e) => $e['kind'] === 'person'); ?>
-  <details class="card">
-    <summary><strong>Link names to employees</strong> <span class="muted tiny">so each person sees only their own target</span></summary>
+  <?php if ($u['role'] === 'admin'): ?>
+  <details class="card" open>
+    <summary><strong>Name settings</strong> <span class="muted tiny">link people to employees and choose Online or Offline for the Sales overview</span></summary>
     <form method="post" action="<?= h(url('track', ['month' => $month])) ?>" style="margin-top:14px">
       <?= csrf_field() ?><input type="hidden" name="action" value="map"><input type="hidden" name="month" value="<?= h($month) ?>">
-      <div class="formgrid">
-        <?php foreach ($persons as $e): ?>
-          <label class="field"><span>Sheet name: <?= h($e['name']) ?></span>
-            <select name="map[<?= h(track_key($e['name'])) ?>]"><option value="0">Not linked</option>
-              <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?>
-            </select></label>
-        <?php endforeach; ?>
-      </div>
-      <div class="actions"><button class="btn" type="submit">Save links</button></div>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Employee (their own target page)</th><th>Show sales on Sales overview as</th></tr></thead><tbody>
+      <?php foreach ($d['ents'] as $e): $k = track_key($e['name']); ?>
+        <tr><td><strong><?= h($e['name']) ?></strong> <span class="muted tiny"><?= $e['kind'] === 'person' ? 'person' : 'platform' ?></span></td>
+          <td><?php if ($e['kind'] === 'person'): ?><select name="map[<?= h($k) ?>]"><option value="0">Not linked</option>
+            <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?></select><?php else: ?><span class="muted tiny">–</span><?php endif; ?></td>
+          <td><select name="cls[<?= h($k) ?>]"><?php foreach (['online' => 'Online', 'offline' => 'Offline', 'none' => 'Not counted'] as $cv => $cl): ?><option value="<?= h($cv) ?>" <?= $e['channel'] === $cv ? 'selected' : '' ?>><?= h($cl) ?></option><?php endforeach; ?></select></td></tr>
+      <?php endforeach; ?>
+      </tbody></table></div>
+      <p class="muted tiny">Only names marked Online or Offline are added to the Sales overview and to the total above, so a sale is never counted twice (for example a person's sales that are already inside a platform). If a platform already has its own sales data for the month, that data is kept and the sheet only fills a gap.</p>
+      <div class="actions"><button class="btn" type="submit">Save</button></div>
     </form>
   </details>
   <?php endif; ?>

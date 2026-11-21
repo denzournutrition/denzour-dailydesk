@@ -18,6 +18,7 @@ function track_migrate(PDO $pdo): void
         achieved REAL, target REAL NOT NULL DEFAULT 0,
         PRIMARY KEY (month, name, day))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_map (name_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 0)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS track_cls (name_key TEXT PRIMARY KEY, channel TEXT NOT NULL DEFAULT 'none')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_meta (month TEXT PRIMARY KEY, synced_at TEXT NOT NULL DEFAULT '')");
     $cols = array_column($pdo->query('PRAGMA table_info(gsync_links)')->fetchAll(), 'name');
     if ($cols && !in_array('month', $cols, true)) {
@@ -159,6 +160,21 @@ function track_user_for(string $name, ?array $users = null): int
     return $tie ? 0 : $best;
 }
 
+/** name_key => 'online' | 'offline' | 'none'. Platforms default to online, people to not counted. */
+function track_classes(): array
+{
+    static $c = null;
+    if ($c === null) { $c = []; foreach (db()->query('SELECT name_key, channel FROM track_cls') as $r) { $c[$r['name_key']] = $r['channel']; } }
+    return $c;
+}
+
+function track_channel(string $name, string $kind): string
+{
+    $c = track_classes();
+    $k = track_key($name);
+    return $c[$k] ?? ($kind === 'platform' ? 'online' : 'none');
+}
+
 function track_load(string $month): array
 {
     $pdo = db();
@@ -188,6 +204,7 @@ function track_load(string $month): array
         $e['need_day'] = $e['monthly'] > $ach ? $e['remaining'] / $left : 0.0;
         $e['projected'] = $asof > 0 ? $ach / $asof * $dim : 0.0;
         $e['user_id'] = $e['kind'] === 'person' ? track_user_for($nm, $users) : 0;
+        $e['channel'] = track_channel($nm, $e['kind']);
         if ($e['monthly'] > 0 && $ach >= $e['monthly']) { $e['state'] = 'hit'; }
         elseif ($asof === 0) { $e['state'] = 'none'; }
         elseif ($e['pace_pct'] >= 100) { $e['state'] = 'ahead'; }
@@ -197,7 +214,7 @@ function track_load(string $month): array
     }
     unset($e);
     $tot = ['monthly' => 0.0, 'achieved' => 0.0, 'expected' => 0.0, 'projected' => 0.0, 'remaining' => 0.0];
-    foreach ($ents as $e) { foreach (array_keys($tot) as $k) { $tot[$k] += $e[$k]; } }
+    foreach ($ents as $e) { if ($e['channel'] === 'none') { continue; } foreach (array_keys($tot) as $k) { $tot[$k] += $e[$k]; } }
     $tot['ach_pct'] = $tot['monthly'] > 0 ? $tot['achieved'] / $tot['monthly'] * 100 : 0;
     $tot['pace_pct'] = $tot['expected'] > 0 ? $tot['achieved'] / $tot['expected'] * 100 : 0;
     $tot['gap'] = $tot['achieved'] - $tot['expected'];
@@ -356,4 +373,40 @@ function track_has(array $u): bool
         $r[$id] = $d['ents'] ? track_for_user($d, $id) !== null : false;
     }
     return $r[$id];
+}
+
+/** Tracker achieved figures that fall inside a date range, for names tagged Online / Offline: [name_key => ['label','kind','sales']]. */
+function track_sales_between(string $from, string $to): array
+{
+    $pdo = db();
+    $cls = track_classes();
+    $out = [];
+    $m = substr($from, 0, 7);
+    $end = substr($to, 0, 7);
+    for ($guard = 0; $m <= $end && $guard < 36; $guard++, $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
+        $kinds = [];
+        $st = $pdo->prepare('SELECT name, kind FROM track_targets WHERE month = ?'); $st->execute([$m]);
+        foreach ($st as $r) { $kinds[$r['name']] = $r['kind']; }
+        $st = $pdo->prepare('SELECT name, day, achieved FROM track_daily WHERE month = ? AND achieved IS NOT NULL'); $st->execute([$m]);
+        foreach ($st as $r) {
+            if (!isset($kinds[$r['name']])) { continue; }
+            $ch = track_channel($r['name'], $kinds[$r['name']]);
+            if ($ch === 'none') { continue; }
+            $date = $m . '-' . str_pad((string)$r['day'], 2, '0', STR_PAD_LEFT);
+            if ($date < $from || $date > $to) { continue; }
+            $k = track_key($r['name']);
+            $out[$k] ??= ['label' => $r['name'], 'kind' => $ch, 'sales' => 0.0, 'days' => []];
+            $out[$k]['sales'] += (float)$r['achieved'];
+            $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$r['achieved'];
+        }
+    }
+    return $out;
+}
+
+/** Names whose tracker figures are used on the Sales overview (set by ceo_sales, read by ceo_daily). */
+function track_used(?array $set = null): array
+{
+    static $u = [];
+    if ($set !== null) { $u = $set; }
+    return $u;
 }
