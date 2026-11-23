@@ -11,6 +11,7 @@ require __DIR__ . '/ecom.php';
 require __DIR__ . '/gsync.php';
 require __DIR__ . '/track.php';
 require __DIR__ . '/routine.php';
+require __DIR__ . '/conn.php';
 require __DIR__ . '/profile.php';
 require __DIR__ . '/channels.php';
 
@@ -137,6 +138,7 @@ function migrate(PDO $pdo): void
     gsync_migrate($pdo);
     track_migrate($pdo);
     routine_migrate($pdo);
+    conn_migrate($pdo);
     profile_migrate($pdo);
     channels_migrate($pdo);
     att_migrate($pdo);
@@ -393,12 +395,16 @@ function layout_head(string $title, string $bodyClass = ''): void
         if (can_ecom_desk($u)) {
             $desks[] = ['ecomdesk', 'E-commerce desk', 'bag'];
         }
+        if (!can_view_dashboard($u) && conn_can($u, 'ads')) { $desks[] = ['ads', 'Ads and creatives', 'trend']; }
+        if (!can_view_dashboard($u) && conn_can($u, 'social')) { $desks[] = ['social', 'Instagram', 'users']; }
         $boards = [];
         if (can_view_dashboard($u)) {
             $boards[] = ['ceo', 'Sales overview', 'trend'];
             $boards[] = ['dashboard', 'Team dashboard', 'grid'];
             $boards[] = ['salesdash', 'Inside Sales', 'trend'];
             $boards[] = ['ecomdash', 'E-commerce', 'bag'];
+            $boards[] = ['ads', 'Ads and creatives', 'trend'];
+            $boards[] = ['social', 'Instagram', 'users'];
             $boards[] = ['attboard', 'Attendance', 'check'];
             $boards[] = ['exports', 'Downloads', 'download'];
         }
@@ -416,7 +422,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $nav[] = [$my || $desks ? 'Dashboards' : 'Workspace', $boards];
         }
         if ($u['role'] === 'admin') {
-            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['routine', 'Daily routine', 'list'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['update', 'Update', 'upload']]];
+            $nav[] = ['Admin', [['people', 'People', 'users'], ['allreports', 'All reports', 'list'], ['salestargets', 'Sales targets', 'target'], ['routine', 'Daily routine', 'list'], ['holidays', 'Holidays', 'calendar'], ['gsync', 'Google Sheets', 'upload'], ['conn', 'Connections', 'widget'], ['update', 'Update', 'upload']]];
         }
     }
     ?><!doctype html>

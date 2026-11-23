@@ -117,6 +117,7 @@ function gsync_run_due(): int
         $due = $l['last_run'] === '' || $now - strtotime($l['last_run']) >= max(5, (int)$l['every_min']) * 60;
         if ($due) { gsync_run((int)$l['id']); $n++; if ($n >= 3) { break; } }
     }
+    $n += conn_run_due();
     return $n;
 }
 

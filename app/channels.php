@@ -77,6 +77,7 @@ function ceo_sales(string $from, string $to): array
     $in = $q('SELECT SUM(amount) s, COUNT(*) o, MAX(order_date) last FROM sales_orders WHERE order_date BETWEEN ? AND ?', [$from, $to])[0];
     $names = array_column($q('SELECT DISTINCT u.name FROM sales_orders o JOIN users u ON u.id = o.user_id WHERE o.order_date BETWEEN ? AND ? ORDER BY u.name', [$from, $to]), 'name');
     $inside = (float)$in['s'];
+    if ($web['meta'] <= 0) { $web['meta'] = ads_meta_sales($from, $to); }
     $entered = $web['s'] > 0;
     $shTotal = $entered ? $web['s'] : $inside;
     $others = $entered ? max(0.0, $web['s'] - $web['meta'] - $web['infl'] - $inside) : 0.0;
