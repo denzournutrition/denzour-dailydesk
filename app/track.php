@@ -19,6 +19,7 @@ function track_migrate(PDO $pdo): void
         PRIMARY KEY (month, name, day))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_map (name_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_cls (name_key TEXT PRIMARY KEY, channel TEXT NOT NULL DEFAULT 'none')");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS track_part (name_key TEXT PRIMARY KEY, parent_key TEXT NOT NULL DEFAULT '')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_src (name_key TEXT PRIMARY KEY, src TEXT NOT NULL DEFAULT 'sheet')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_manual (
         month TEXT NOT NULL, name TEXT NOT NULL, day INTEGER NOT NULL, achieved REAL NOT NULL DEFAULT 0, user_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT '',
@@ -51,7 +52,7 @@ function track_parse(string $path): array
     foreach ($sheets as $sh) {
         foreach (array_slice($sh['rows'], 0, 6) as $r) {
             $n = 0;
-            foreach ($r as $c) { if (preg_match('/achieved/i', (string)$c)) { $n++; } }
+            foreach ($r as $c) { if (preg_match('/^[^%]*\S\s*achieved/i', trim((string)$c))) { $n++; } }
             if ($n >= 2) { $tracker = $sh; break 2; }
         }
     }
@@ -60,7 +61,7 @@ function track_parse(string $path): array
     $hdrRow = null;
     foreach ($tracker['rows'] as $ri => $r) {
         $n = 0;
-        foreach ($r as $c) { if (preg_match('/achieved/i', (string)$c)) { $n++; } }
+        foreach ($r as $c) { if (preg_match('/^[^%]*\S\s*achieved/i', trim((string)$c))) { $n++; } }
         if ($n >= 2) { $hdrRow = $ri; break; }
     }
     $hdr = $tracker['rows'][$hdrRow];
@@ -170,6 +171,14 @@ function track_classes(): array
     static $c = null;
     if ($c === null) { $c = []; foreach (db()->query('SELECT name_key, channel FROM track_cls') as $r) { $c[$r['name_key']] = $r['channel']; } }
     return $c;
+}
+
+/** name_key (a sheet name, or 'p:<platform>' for a platform-sheet row) => the sheet name it is included in. */
+function track_parts(): array
+{
+    static $p = null;
+    if ($p === null) { $p = []; foreach (db()->query("SELECT name_key, parent_key FROM track_part WHERE parent_key <> ''") as $r) { $p[$r['name_key']] = $r['parent_key']; } }
+    return $p;
 }
 
 function track_channel(string $name, string $kind): string
@@ -292,6 +301,8 @@ function track_load_raw(string $month): array
         $left = max(1, $dim - $asof);
         $e['need_day'] = $e['monthly'] > $ach ? $e['remaining'] / $left : 0.0;
         $e['projected'] = $asof > 0 ? $ach / $asof * $dim : 0.0;
+        $pk0 = track_parts()[track_key($nm)] ?? '';
+        $e['parent'] = ($pk0 !== '' && $pk0 !== track_key($nm)) ? (function () use ($ents, $pk0) { foreach ($ents as $x) { if (track_key($x['name']) === $pk0) { return $x['name']; } } return ''; })() : '';
         $e['channel'] = track_channel($nm, $e['kind']);
         if ($e['monthly'] > 0 && $ach >= $e['monthly']) { $e['state'] = 'hit'; }
         elseif ($asof === 0) { $e['state'] = 'none'; }
@@ -302,7 +313,7 @@ function track_load_raw(string $month): array
     }
     unset($e);
     $tot = ['monthly' => 0.0, 'achieved' => 0.0, 'expected' => 0.0, 'projected' => 0.0, 'remaining' => 0.0];
-    foreach ($ents as $e) { if ($e['channel'] === 'none') { continue; } foreach (array_keys($tot) as $k) { $tot[$k] += $e[$k]; } }
+    foreach ($ents as $e) { if ($e['channel'] === 'none' || $e['parent'] !== '') { continue; } foreach (array_keys($tot) as $k) { $tot[$k] += $e[$k]; } }
     $tot['ach_pct'] = $tot['monthly'] > 0 ? $tot['achieved'] / $tot['monthly'] * 100 : 0;
     $tot['pace_pct'] = $tot['expected'] > 0 ? $tot['achieved'] / $tot['expected'] * 100 : 0;
     $tot['gap'] = $tot['achieved'] - $tot['expected'];
@@ -487,20 +498,20 @@ function track_has(array $u): bool
 }
 
 /** Tracker achieved figures that fall inside a date range, for names tagged Online / Offline: [name_key => ['label','kind','sales','days']]. */
-function track_sales_between(string $from, string $to): array
+function track_sales_between(string $from, string $to, bool $children = false): array
 {
     $out = [];
     $m = substr($from, 0, 7);
     $end = substr($to, 0, 7);
     for ($guard = 0; $m <= $end && $guard < 36; $guard++, $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
         foreach (track_load($m)['ents'] as $e) {
-            if ($e['channel'] === 'none') { continue; }
+            if ($children ? $e['parent'] === '' : ($e['channel'] === 'none' || $e['parent'] !== '')) { continue; }
             foreach ($e['days'] as $day => $x) {
                 if ($x['a'] === null) { continue; }
                 $date = $m . '-' . str_pad((string)$day, 2, '0', STR_PAD_LEFT);
                 if ($date < $from || $date > $to) { continue; }
                 $k = track_key($e['name']);
-                $out[$k] ??= ['label' => $e['name'], 'kind' => $e['channel'], 'sales' => 0.0, 'days' => []];
+                $out[$k] ??= ['label' => $e['name'], 'kind' => $e['channel'] === 'none' ? 'online' : $e['channel'], 'sales' => 0.0, 'days' => [], 'parent' => $e['parent']];
                 $out[$k]['sales'] += (float)$x['a'];
                 $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$x['a'];
             }
@@ -515,4 +526,18 @@ function track_used(?array $set = null): array
     static $u = [];
     if ($set !== null) { $u = $set; }
     return $u;
+}
+
+
+/** Which ecom-sheet platforms are the work of one counted person (their sales are already inside that person's figure). */
+function track_platform_owner(string $platform, array $ents): string
+{
+    $k = 'p:' . $platform;
+    $saved = track_parts()[$k] ?? null;
+    if ($saved !== null) { return $saved === '-' ? '' : $saved; }
+    if (!in_array($platform, ['blinkit', 'myntra', 'hugulife', 'tata1mg'], true)) { return ''; }
+    $st = db()->prepare("SELECT id FROM users WHERE active = 1 AND designation = ? ORDER BY id"); $st->execute([ECOM_DESIG]);
+    $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    foreach ($ents as $e) { if ($e['kind'] === 'person' && in_array((int)$e['user_id'], $ids, true) && $e['channel'] !== 'none' && $e['parent'] === '') { return track_key($e['name']); } }
+    return '';
 }

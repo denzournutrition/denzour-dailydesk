@@ -81,13 +81,13 @@ layout_head('Sales overview');
     <p class="muted">No offline sales have been entered for this month. <?php if (can_enter_channels($me)): ?><a href="<?= h(url('channels')) ?>">Add offline sales</a><?php else: ?>Ask the admin or the sales team to add them under "Other sales".<?php endif; ?></p>
   <?php endif; ?>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Share</th><th class="r">Orders</th><?php if ($kind === 'online'): ?><th class="r hm">Ad spend</th><th class="r hm">ROAS</th><?php endif; ?><th class="r">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?></th><th class="r hm">Last data</th></tr></thead><tbody>
-  <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; $isSh = $r['key'] === 'shopify'; ?>
-    <tr<?= $isSh ? ' style="background:var(--soft)"' : '' ?>>
-      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?><?= !empty($r['src']) ? ' <span class="chip" title="From the Targets Google Sheet">Sheet</span>' : '' ?></td>
+  <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; $isSh = $r['key'] === 'shopify'; $inc = ($r['in_total'] ?? true) === false; ?>
+    <tr<?= $isSh ? ' style="background:var(--soft)"' : ($inc ? ' style="opacity:.72"' : '') ?>>
+      <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?><?= !empty($r['src']) && !$inc ? ' <span class="chip" title="Total from the main sale sheet">Main sheet</span>' : '' ?><?= $inc ? ' <span class="chip" title="Shown for detail. Already inside ' . h((string)$r['part_of']) . ', so it is not added again.">Inside ' . h((string)$r['part_of']) . '</span>' : '' ?><?= isset($r['detail']) && $r['detail'] > 0 && abs($r['detail'] - $r['sales']) > 1 ? ' <span class="muted tiny" title="What the platform sheet shows for the same month">platform sheet ' . h(inr_short((float)$r['detail'])) . '</span>' : '' ?></td>
       <td class="r"><strong><?= h(inr($r['sales'])) ?></strong></td>
-      <td class="r"><?= $share($r['sales'], $sub) ?>%</td>
+      <td class="r"><?= $inc ? '<span class="muted">–</span>' : $share($r['sales'], $sub) . '%' ?></td>
       <td class="r"><?= number_format($r['orders']) ?></td>
-      <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas($r['sales'], $r['spend'])) : '–' ?></td><?php endif; ?>
+      <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas((float)($r['detail'] ?? $r['sales']), $r['spend'])) : '–' ?></td><?php endif; ?>
       <td class="r"><?= $chg($r['sales'], (float)$o) ?: '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>

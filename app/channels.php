@@ -89,8 +89,10 @@ function ceo_sales(string $from, string $to): array
             ['key' => 'sub:others', 'label' => 'Others (rest of Shopify)', 'sales' => $others, 'orders' => null],
         ]];
     array_unshift($rows, $shopify);
-    // Tracker sheet sales (names tagged Online / Offline). A row that already has real sales keeps them; the tracker fills only what is empty, so nothing is counted twice.
-    $used = [];
+    // The main sale sheet (Targets tracker) is the source of every total. Names tagged Online / Offline take over their line;
+    // the platform-wise sheets keep supplying the split and the ad spend, shown but never added a second time.
+    $used = []; $skip = [];
+    $ents = track_load(substr($from, 0, 7))['ents'];
     foreach (track_sales_between($from, $to) as $tk => $t) {
         if ($t['sales'] <= 0) { continue; }
         $hit = null;
@@ -99,23 +101,54 @@ function ceo_sales(string $from, string $to): array
             if ($rk === $tk || str_starts_with($rk, $tk)) { $hit = $i; break; }
         }
         if ($hit !== null) {
-            if ($rows[$hit]['sales'] <= 0) { $rows[$hit]['sales'] = $t['sales']; $rows[$hit]['kind'] = $t['kind']; $rows[$hit]['src'] = 'tracker'; $used[$tk] = $t['days']; }
+            $rows[$hit]['detail'] = $rows[$hit]['sales']; $rows[$hit]['sales'] = $t['sales']; $rows[$hit]['kind'] = $t['kind']; $rows[$hit]['src'] = 'tracker';
+            if ($rows[$hit]['key'] === 'shopify') {
+                $skip['web'] = true;
+                foreach ($rows[$hit]['subs'] as &$sb) { if ($sb['key'] === 'sub:others') { $sb['sales'] = max(0.0, $t['sales'] - $web['meta'] - $web['infl'] - $inside); } } unset($sb);
+            }
+            if (!empty($rows[$hit]['platform'])) { $skip[$rows[$hit]['platform']] = true; }
+            $used[$tk] = $t['days'];
         } else {
             $rows[] = ['key' => 't:' . $tk, 'label' => $t['label'], 'group' => $t['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $t['kind'], 'sales' => $t['sales'], 'orders' => 0,
                 'spend' => 0.0, 'days' => count($t['days']), 'last' => max(array_keys($t['days'])), 'platform' => '', 'src' => 'tracker'];
             $used[$tk] = $t['days'];
         }
     }
-    track_used($used);
+    ceo_skip(substr($from, 0, 7) . '|u', $used);
+    // Platform-sheet rows that belong to a counted person (Ritik's Blinkit, Myntra, HUGU Life, Tata 1mg): shown, not added.
+    foreach ($rows as $i => $r) {
+        if (empty($r['platform']) || !empty($r['src'])) { continue; }
+        $own = track_platform_owner($r['platform'], $ents);
+        if ($own !== '' && isset($used[$own])) {
+            $label = ''; foreach ($ents as $e) { if (track_key($e['name']) === $own) { $label = $e['name']; } }
+            $rows[$i]['in_total'] = false; $rows[$i]['part_of'] = $label; $skip[$r['platform']] = true;
+        }
+    }
+    // Names that are already part of another line (for example Sourabh inside Shopify): shown, not added.
+    foreach (track_sales_between($from, $to, true) as $t) {
+        if ($t['sales'] <= 0) { continue; }
+        $rows[] = ['key' => 't:' . track_key($t['label']), 'label' => $t['label'], 'group' => 'Included', 'kind' => $t['kind'], 'sales' => $t['sales'], 'orders' => 0, 'spend' => 0.0,
+            'days' => count($t['days']), 'last' => max(array_keys($t['days'])), 'platform' => '', 'src' => 'tracker', 'in_total' => false, 'part_of' => $t['parent']];
+    }
+    ceo_skip(substr($from, 0, 7), $skip);
     $tot = ['online' => 0.0, 'offline' => 0.0, 'orders' => 0, 'spend' => 0.0, 'mp_sales' => 0.0];
     foreach ($rows as $r) {
+        $tot['spend'] += $r['spend'];
+        if ($r['group'] === 'Marketplace') { $tot['mp_sales'] += $r['detail'] ?? $r['sales']; }
+        if (($r['in_total'] ?? true) === false) { continue; }
         $tot[$r['kind']] += $r['sales'];
         $tot['orders'] += $r['orders'];
-        $tot['spend'] += $r['spend'];
-        if ($r['group'] === 'Marketplace') { $tot['mp_sales'] += $r['sales']; }
     }
     $tot['all'] = $tot['online'] + $tot['offline'];
     return ['rows' => $rows, 'tot' => $tot, 'web_entered' => $entered];
+}
+
+/** Lines whose own sheet data must not be added to daily totals because the main sale sheet already covers them. */
+function ceo_skip(string $key, ?array $set = null): array
+{
+    static $s = [];
+    if ($set !== null) { $s[$key] = $set; }
+    return $s[$key] ?? [];
 }
 
 /** Per-day online and offline totals for a date range (same counting rules as ceo_sales). */
@@ -124,15 +157,16 @@ function ceo_daily(string $from, string $to, bool $webEntered): array
     $pdo = db();
     $d = [];
     $add = function (string $day, string $kind, float $v) use (&$d) { $d[$day] ??= ['online' => 0.0, 'offline' => 0.0]; $d[$day][$kind] += $v; };
-    $st = $pdo->prepare('SELECT day, SUM(sales) s FROM ecom_daily WHERE day BETWEEN ? AND ? GROUP BY day'); $st->execute([$from, $to]);
-    foreach ($st as $r) { $add($r['day'], 'online', (float)$r['s']); }
-    $st = $pdo->prepare('SELECT d.day, c.kind, SUM(d.sales) s FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.active = 1 AND d.day BETWEEN ? AND ? GROUP BY d.day, c.kind'); $st->execute([$from, $to]);
+    $skip = ceo_skip(substr($from, 0, 7));
+    $st = $pdo->prepare('SELECT day, platform, SUM(sales) s FROM ecom_daily WHERE day BETWEEN ? AND ? GROUP BY day, platform'); $st->execute([$from, $to]);
+    foreach ($st as $r) { if (empty($skip[$r['platform']])) { $add($r['day'], 'online', (float)$r['s']); } }
+    $st = $pdo->prepare('SELECT d.day, c.kind, SUM(d.sales) s FROM channel_daily d JOIN sales_channels c ON c.id = d.channel_id WHERE c.active = 1 ' . (!empty($skip['web']) ? 'AND c.web = 0 ' : '') . 'AND d.day BETWEEN ? AND ? GROUP BY d.day, c.kind'); $st->execute([$from, $to]);
     foreach ($st as $r) { $add($r['day'], $r['kind'], (float)$r['s']); }
-    if (!$webEntered) {
+    if (!$webEntered && empty($skip['web'])) {
         $st = $pdo->prepare('SELECT order_date day, SUM(amount) s FROM sales_orders WHERE order_date BETWEEN ? AND ? GROUP BY order_date'); $st->execute([$from, $to]);
         foreach ($st as $r) { $add($r['day'], 'online', (float)$r['s']); }
     }
-    foreach (track_used() as $tk => $days) { foreach ($days as $date => $v) { if ($date >= $from && $date <= $to) { $kind = track_classes()[$tk] ?? 'online'; $add($date, $kind === 'offline' ? 'offline' : 'online', (float)$v); } } }
+    foreach (ceo_skip(substr($from, 0, 7) . '|u') as $tk => $days) { foreach ($days as $date => $v) { if ($date >= $from && $date <= $to) { $kind = track_classes()[$tk] ?? 'online'; $add($date, $kind === 'offline' ? 'offline' : 'online', (float)$v); } } }
     krsort($d);
     return $d;
 }

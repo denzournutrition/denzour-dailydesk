@@ -16,6 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array)($_POST['cls'] ?? []) as $key => $ch) { $uc->execute([track_key((string)$key), in_array($ch, ['online', 'offline'], true) ? $ch : 'none']); }
         $us = $pdo->prepare('INSERT INTO track_src (name_key, src) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET src = excluded.src');
         foreach ((array)($_POST['src'] ?? []) as $key => $sv) { $us->execute([track_key((string)$key), in_array($sv, ['auto', 'manual'], true) ? $sv : 'sheet']); }
+        $up2 = $pdo->prepare('INSERT INTO track_part (name_key, parent_key) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET parent_key = excluded.parent_key');
+        foreach ((array)($_POST['part'] ?? []) as $key => $pv) { $key = (string)$key; $up2->execute([strpos($key, 'p:') === 0 ? $key : track_key($key), (string)$pv === '' || (string)$pv === '-' ? (string)$pv : track_key((string)$pv)]); }
         flash('success', 'Saved.');
     } elseif ($act === 'enter') {
         $name = (string)($_POST['name'] ?? '');
@@ -110,16 +112,21 @@ layout_head('Targets');
     <summary><strong>Name settings</strong> <span class="muted tiny">link people to employees and choose Online or Offline for the Sales overview</span></summary>
     <form method="post" action="<?= h(url('track', ['month' => $month])) ?>" style="margin-top:14px">
       <?= csrf_field() ?><input type="hidden" name="action" value="map"><input type="hidden" name="month" value="<?= h($month) ?>">
-      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Assigned to employee (they see this target)</th><th>Show sales on Sales overview as</th><th>Daily figures come from</th></tr></thead><tbody>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Assigned to employee (they see this target)</th><th>Show sales on Sales overview as</th><th>Daily figures come from</th><th>Already included in</th></tr></thead><tbody>
       <?php foreach ($d['ents'] as $e): $k = track_key($e['name']); ?>
         <tr><td><strong><?= h($e['name']) ?></strong> <span class="muted tiny"><?= $e['kind'] === 'person' ? 'person' : 'platform' ?></span></td>
           <td><select name="map[<?= h($k) ?>]"><option value="0"><?= $e['kind'] === 'person' ? 'Not linked' : 'Nobody' ?></option>
             <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?></select></td>
           <td><select name="cls[<?= h($k) ?>]"><?php foreach (['online' => 'Online', 'offline' => 'Offline', 'none' => 'Not counted'] as $cv => $cl): ?><option value="<?= h($cv) ?>" <?= $e['channel'] === $cv ? 'selected' : '' ?>><?= h($cl) ?></option><?php endforeach; ?></select></td>
-          <td><select name="src[<?= h($k) ?>]"><?php foreach (['sheet' => 'Google Sheet', 'auto' => 'Automatic (DailyDesk data)', 'manual' => 'Employee types them'] as $sv => $sl): ?><option value="<?= h($sv) ?>" <?= $e['src'] === $sv ? 'selected' : '' ?>><?= h($sl) ?></option><?php endforeach; ?></select></td></tr>
+          <td><select name="src[<?= h($k) ?>]"><?php foreach (['sheet' => 'Google Sheet', 'auto' => 'Automatic (DailyDesk data)', 'manual' => 'Employee types them'] as $sv => $sl): ?><option value="<?= h($sv) ?>" <?= $e['src'] === $sv ? 'selected' : '' ?>><?= h($sl) ?></option><?php endforeach; ?></select></td>
+          <td><select name="part[<?= h($k) ?>]"><option value="">Nothing (counted on its own)</option><?php foreach ($d['ents'] as $o): if ($o['name'] === $e['name']) { continue; } ?><option value="<?= h(track_key($o['name'])) ?>" <?= $e['parent'] === $o['name'] ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></td></tr>
+      <?php endforeach; ?>
+      <?php foreach (['blinkit', 'myntra', 'hugulife', 'tata1mg'] as $pkey): $own = track_platform_owner($pkey, $d['ents']); $saved = track_parts()['p:' . $pkey] ?? null; ?>
+        <tr><td><strong><?= h(ECOM_PLATFORMS[$pkey][0]) ?></strong> <span class="muted tiny">platform sheet</span></td><td class="muted tiny" colspan="3">Platform-wise sales and spend from the e-commerce sheet</td>
+          <td><select name="part[p:<?= h($pkey) ?>]"><option value="-" <?= $saved === '-' ? 'selected' : '' ?>>Nothing (counted on its own)</option><?php foreach ($d['ents'] as $o): if ($o['kind'] !== 'person') { continue; } ?><option value="<?= h(track_key($o['name'])) ?>" <?= $own === track_key($o['name']) ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></td></tr>
       <?php endforeach; ?>
       </tbody></table></div>
-      <p class="muted tiny">Only names marked Online or Offline are added to the Sales overview and to the total above, so a sale is never counted twice (for example a person's sales that are already inside a platform). <strong>Automatic</strong> uses a person's Inside Sales orders, or a platform's e-commerce and Shopify data, already in DailyDesk (days with nothing become ₹0). <strong>Employee types them</strong> gives the assigned employee a box on their My target page; what they type overrides the sheet for that day. If a platform already has its own sales data for the month, that data is kept and the sheet only fills a gap.</p>
+      <p class="muted tiny"><strong>Already included in</strong> is for a name whose sales are part of another line, such as Sourabh's influencer sales inside Shopify, or Ritik's four platforms inside Ritik. It is still shown, but never added twice. Only names marked Online or Offline are added to the Sales overview and to the total above, so a sale is never counted twice (for example a person's sales that are already inside a platform). <strong>Automatic</strong> uses a person's Inside Sales orders, or a platform's e-commerce and Shopify data, already in DailyDesk (days with nothing become ₹0). <strong>Employee types them</strong> gives the assigned employee a box on their My target page; what they type overrides the sheet for that day.  The total always comes from this main sheet; the platform-wise sheets only show the split and the ad spend.</p>
       <div class="actions"><button class="btn" type="submit">Save</button></div>
     </form>
   </details>
