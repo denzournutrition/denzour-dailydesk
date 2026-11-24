@@ -66,6 +66,46 @@ layout_head('Sales overview');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= !empty($tot['sheet_spend']) ? 'Online ad spend' : 'Marketplace ad spend' ?></span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas(!empty($tot['sheet_spend']) ? $tot['online'] : $tot['mp_sales'], $tot['spend'])) ?> on <?= !empty($tot['sheet_spend']) ? 'all online sales' : 'marketplaces' ?></span></div>
 </div>
 
+<?php if ($tot['spend'] > 0):
+  $dim = (int)date('t', strtotime($month . '-01'));
+  $elapsed = $month < substr($today, 0, 7) ? $dim : ($month > substr($today, 0, 7) ? 0 : (int)date('j', strtotime($today)));
+  $elapsed = max(1, min($dim, $elapsed));
+  $roas = $tot['online'] > 0 ? $tot['online'] / $tot['spend'] : 0.0;
+  $oroas = ($otot['spend'] ?? 0) > 0 ? $otot['online'] / $otot['spend'] : 0.0;
+  $spPct = $tot['online'] > 0 ? $tot['spend'] / $tot['online'] * 100 : 0.0;
+  $oPct = ($otot['online'] ?? 0) > 0 && ($otot['spend'] ?? 0) > 0 ? $otot['spend'] / $otot['online'] * 100 : 0.0;
+  $net = $tot['online'] - $tot['spend'];
+  $perDay = $tot['online'] / $elapsed; $spDay = $tot['spend'] / $elapsed;
+  $projS = $perDay * $dim; $projSp = $spDay * $dim;
+  $lines = array_values(array_filter($cur['rows'], fn($r) => ($r['kind'] === 'online') && ($r['in_total'] ?? true) !== false && $r['spend'] > 0));
+  usort($lines, fn($a, $b) => ($b['sales'] / max(1, $b['spend'])) <=> ($a['sales'] / max(1, $a['spend'])));
+  $best = $lines[0] ?? null; $worst = count($lines) > 1 ? $lines[count($lines) - 1] : null;
+  $rd = function (float $c, float $o, bool $upGood = true): string {
+      if ($o <= 0) { return ''; }
+      $d = $c - $o; if (abs($d) < 0.005) { return ''; }
+      $good = $upGood ? $d > 0 : $d < 0;
+      return '<span class="delta delta--' . ($good ? 'up' : 'down') . '">' . ($d > 0 ? '▲ ' : '▼ ') . h(number_format(abs($d), 2)) . '</span>';
+  };
+?>
+<div class="kpis kpis--4">
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">ROAS (online)</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(number_format($roas, 2)) ?>x <?= $rd($roas, $oroas) ?></strong><span class="kpi__s">Every ₹1 of ads brought ₹<?= h(number_format($roas, 2)) ?><?= $oroas > 0 ? ' · last month ' . h(number_format($oroas, 2)) . 'x' : '' ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Spend per ₹100 sold</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v">₹<?= h(number_format($spPct, 1)) ?> <?= $rd($spPct, $oPct, false) ?></strong><span class="kpi__s">Ad cost as % of online sales<?= $oPct > 0 ? ' · last month ' . h(number_format($oPct, 1)) . '%' : '' ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Sales after ad spend</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($net)) ?></strong><span class="kpi__s">Online sales − ad spend, before product cost</span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Month-end at this pace</span><span class="kpi__ic"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($projS)) ?></strong><span class="kpi__s"><?= h(inr_short($perDay)) ?> sales and <?= h(inr_short($spDay)) ?> spend a day · spend <?= h(inr_short($projSp)) ?></span></div>
+</div>
+<section class="card">
+  <div class="card__h"><h2>Spend and return by line</h2><span class="muted tiny">Spend is the monthly figure from the main sheet<?= $elapsed < $dim ? ' (month to date)' : '' ?></span></div>
+  <?php if ($best): ?><p class="muted" style="margin:0 0 12px">Best return: <strong><?= h($best['label']) ?></strong> at <?= h(ecom_roas((float)$best['sales'], (float)$best['spend'])) ?><?php if ($worst): ?> · weakest: <strong><?= h($worst['label']) ?></strong> at <?= h(ecom_roas((float)$worst['sales'], (float)$worst['spend'])) ?><?php endif; ?>.</p><?php endif; ?>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Line</th><th class="r">Sales</th><th class="r">Ad spend</th><th class="r">Share of spend</th><th class="r">ROAS</th><th class="r hm">Spend per ₹100</th><th class="r hm">Sales after spend</th><th class="r hm">Sales a day</th></tr></thead><tbody>
+  <?php foreach ($lines as $r): $ro = $r['sales'] / $r['spend']; ?>
+    <tr><td><strong><?= h($r['label']) ?></strong></td><td class="r"><?= h(inr($r['sales'])) ?></td><td class="r"><?= h(inr($r['spend'])) ?></td><td class="r"><?= $share($r['spend'], $tot['spend']) ?>%</td><td class="r"><strong class="<?= $ro >= 3 ? 'good' : ($ro < 1.5 ? 'bad' : '') ?>"><?= h(number_format($ro, 2)) ?>x</strong></td><td class="r hm">₹<?= h(number_format($r['spend'] / max(1, $r['sales']) * 100, 1)) ?></td><td class="r hm"><?= h(inr($r['sales'] - $r['spend'])) ?></td><td class="r hm"><?= h(inr_short($r['sales'] / $elapsed)) ?></td></tr>
+  <?php endforeach; ?>
+    <tr style="background:var(--soft)"><td><strong>All online</strong></td><td class="r"><strong><?= h(inr($tot['online'])) ?></strong></td><td class="r"><strong><?= h(inr($tot['spend'])) ?></strong></td><td class="r">100%</td><td class="r"><strong><?= h(number_format($roas, 2)) ?>x</strong></td><td class="r hm">₹<?= h(number_format($spPct, 1)) ?></td><td class="r hm"><strong><?= h(inr($net)) ?></strong></td><td class="r hm"><?= h(inr_short($perDay)) ?></td></tr>
+  </tbody></table></div>
+  <p class="muted tiny" style="margin-top:10px">ROAS = sales ÷ ad spend. Green is 3x or more, red is under 1.5x. Lines with no spend in the sheet are left out. Ritik's spend covers Blinkit, Myntra, HUGU Life and Tata 1mg together.</p>
+</section>
+<?php endif; ?>
+
 <?php $td = track_load($month); if ($td['ents']): $tt = $td['tot']; ?>
 <section class="card">
   <div class="card__h"><h2>Targets and pace</h2><a class="btn btn--ghost btn--sm" href="<?= h(url('track', ['month' => $month])) ?>">Open full view</a></div>
@@ -87,7 +127,7 @@ layout_head('Sales overview');
       <td class="r"><strong><?= h(inr($r['sales'])) ?></strong></td>
       <td class="r"><?= $inc ? '<span class="muted">–</span>' : $share($r['sales'], $sub) . '%' ?></td>
       <td class="r"><?= number_format($r['orders']) ?></td>
-      <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas((float)($r['detail'] ?? $r['sales']), $r['spend'])) : '–' ?></td><?php endif; ?>
+      <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas((float)(isset($r['detail_spend']) ? $r['sales'] : ($r['detail'] ?? $r['sales'])), $r['spend'])) : '–' ?></td><?php endif; ?>
       <td class="r"><?= $chg($r['sales'], (float)$o) ?: '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>
