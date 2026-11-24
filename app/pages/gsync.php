@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($sid === '') { flash('error', 'That does not look like a Google Sheets link. Copy it from the browser address bar.'); }
         elseif ($kind === 'sales' && !$uid) { flash('error', 'Choose the sales person this sheet belongs to.'); }
         else {
-            $every = in_array((int)($_POST['every'] ?? 15), [5, 15, 30, 60], true) ? (int)$_POST['every'] : 15;
+            $every = in_array((int)($_POST['every'] ?? 5), [5, 15, 30, 60], true) ? (int)$_POST['every'] : 5;
             $label = mb_substr(trim((string)($_POST['label'] ?? '')), 0, 80);
             $pdo->prepare('INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at, month) VALUES (?,?,?,?,?,?,?,?)')
                 ->execute([$label, $kind, $kind === 'sales' ? $uid : 0, $sid, mb_substr($url, 0, 400), $every, date('Y-m-d H:i:s'), $kind === 'targets' ? $tmonth : '']);
@@ -88,7 +88,7 @@ layout_head('Google Sheets');
     <label class="field"><span>Type</span><select name="kind" id="gskind"><?php foreach ($kinds as $k => $t): ?><option value="<?= h($k) ?>"><?= h($t) ?></option><?php endforeach; ?></select></label>
     <label class="field"><span>Sales person <em>for Sales type</em></span><select name="user_id"><option value="">Choose…</option><?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>"><?= h($pp['name']) ?></option><?php endforeach; ?></select></label>
     <label class="field"><span>Month <em>for Targets type</em></span><input type="month" name="month" placeholder="Leave empty = current month"></label>
-    <label class="field"><span>Refresh every</span><select name="every"><option value="5">5 minutes</option><option value="15" selected>15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+    <label class="field"><span>Refresh every</span><select name="every"><option value="5" selected>5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
   </div>
   <div class="actions"><button class="btn" type="submit">Connect and sync now</button></div>
   <p class="muted tiny"><strong>Targets and daily tracker:</strong> one sheet for the whole team. A <em>Daily Tracker</em> tab with rows <em>Day 1, Day 2…</em> and columns like <em>Ravi Achieved</em> and <em>Ravi Daily Target</em> (people and platforms), plus an optional <em>Summary</em> tab with Monthly Target. Each person then sees only their own target; admin and CEO see everyone. Leave Month empty to use the current month automatically.</p>

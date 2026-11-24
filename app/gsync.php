@@ -12,13 +12,21 @@ function gsync_migrate(PDO $pdo): void
         user_id INTEGER NOT NULL DEFAULT 0,
         sheet_id TEXT NOT NULL,
         url TEXT NOT NULL DEFAULT '',
-        every_min INTEGER NOT NULL DEFAULT 15,
+        every_min INTEGER NOT NULL DEFAULT 5,
         enabled INTEGER NOT NULL DEFAULT 1,
         last_run TEXT NOT NULL DEFAULT '',
         last_ok INTEGER NOT NULL DEFAULT 0,
         last_msg TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT ''
     )");
+    // all Google Sheets refresh every 5 minutes (one-time switch for links made earlier)
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL DEFAULT '')");
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'gsync_5min'")->fetchColumn()) {
+            $pdo->exec('UPDATE gsync_links SET every_min = 5');
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('gsync_5min', '1')");
+        }
+    } catch (Throwable $e) { /* ignore */ }
 }
 
 function gsync_sheet_id(string $url): string

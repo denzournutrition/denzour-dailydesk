@@ -37,7 +37,7 @@ function track_migrate(PDO $pdo): void
             $has = $pdo->prepare('SELECT 1 FROM gsync_links WHERE sheet_id = ?'); $has->execute([$sid]);
             if (!$has->fetchColumn()) {
                 $pdo->prepare("INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at, month) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute(['Main sale sheet', 'targets', 0, $sid, 'https://docs.google.com/spreadsheets/d/' . $sid . '/edit', 15, date('Y-m-d H:i:s'), '']);
+                    ->execute(['Main sale sheet', 'targets', 0, $sid, 'https://docs.google.com/spreadsheets/d/' . $sid . '/edit', 5, date('Y-m-d H:i:s'), '']);
             }
             $pdo->prepare("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_main_sheet', '1')")->execute();
         }
