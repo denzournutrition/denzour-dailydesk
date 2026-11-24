@@ -16,4 +16,5 @@ jobs:
           GSYNC_URL: ${{ secrets.GSYNC_URL }}
         run: |
           if [ -z "$GSYNC_URL" ]; then echo "No GSYNC_URL secret set. Skipping."; exit 0; fi
-          curl -s -m 60 -o /dev/null -w "HTTP %{http_code}\n" "$GSYNC_URL"
+          URL=$(printf '%s' "$GSYNC_URL" | tr -d '"' | tr -d "'" | tr -d '[:space:]')
+          curl -s -m 60 -o /dev/null -w "HTTP %{http_code}\n" "$URL"
