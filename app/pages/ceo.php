@@ -1,13 +1,15 @@
 <?php
 defined('DD') or exit;
 $pdo = db(); $me = user(); $today = today();
-$month = s_month($_GET['month'] ?? null);
+$P = period_pick();
+$month = $P['month'];
 [$mS, $mE] = s_month_range($month);
+$sFrom = $P['from']; $sTo = $P['to'];
 $mEnd = min($mE, $today);
 $prevMonth = date('Y-m', strtotime($month . '-01 -1 month'));
-[$pS, $pE] = s_month_range($prevMonth);
-$cur = ceo_sales($mS, $mE);
-$old = ceo_sales($pS, $pE);
+$prevLabel = $P['plabel'];
+$cur = ceo_sales($sFrom, $sTo);
+$old = ceo_sales($P['pf'], $P['pt']);
 $tot = $cur['tot']; $otot = $old['tot'];
 $oldBy = []; foreach ($old['rows'] as $r) { $oldBy[$r['key']] = $r; }
 // The main sale sheet has no earlier months, so its figures are never compared with last month. Lines from a person's own sheet still are.
@@ -30,10 +32,10 @@ $trend = [];
 for ($i = 5; $i >= 0; $i--) {
     $m = date('Y-m', strtotime($month . '-01 -' . $i . ' month'));
     [$a, $b] = s_month_range($m);
-    $x = ($m === $month) ? $cur : (($m === $prevMonth) ? $old : ceo_sales($a, $b));
+    $x = ($P['isMonth'] && $m === $month) ? $cur : (($P['isMonth'] && $m === $prevMonth) ? $old : ceo_sales($a, $b));
     $trend[] = ['m' => $m, 'on' => $x['tot']['online'], 'off' => $x['tot']['offline'], 'all' => $x['tot']['all'], 'orders' => $x['tot']['orders'], 'spend' => $x['tot']['spend']];
 }
-$daily = ceo_daily($mS, $mEnd, $cur['web_entered']);
+$daily = ceo_daily($P['isMonth'] ? $mS : $sFrom, $P['isMonth'] ? $mEnd : min($sTo, $today), $cur['web_entered']);
 
 /* team tasks */
 $people = $pdo->query("SELECT id, name, designation FROM users WHERE active = 1 AND role = 'employee' ORDER BY name")->fetchAll();
@@ -55,15 +57,15 @@ $qBase = ['month' => $month];
 layout_head('Sales overview');
 ?>
 <div class="pagehead">
-  <div><h1>Sales overview</h1><p class="muted">Every platform, online and offline · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
+  <div><h1>Sales overview</h1><p class="muted">Every platform, online and offline · <?= h($P['label']) ?><?= $P['isMonth'] ? '' : ' (' . h(fmt_date($sFrom)) . ($sFrom === $sTo ? '' : ' to ' . h(fmt_date($sTo))) . ')' ?></p></div>
   <div class="pagehead__r">
-    <form method="get" class="filters" style="margin:0"><input type="hidden" name="p" value="ceo"><label class="field"><span class="sr">Month</span><select name="month" data-autosubmit><?php foreach ($monthOpts as $m): ?><option value="<?= h($m) ?>" <?= $m === $month ? 'selected' : '' ?>><?= h(date('F Y', strtotime($m . '-01'))) ?></option><?php endforeach; ?></select></label></form>
-    <a class="btn btn--ghost" href="<?= $dl('sales_all', $mS, $mE) ?>"><?= icon('download') ?>Sales CSV</a>
+    <?= period_bar('ceo', $P) ?>
+    <a class="btn btn--ghost" href="<?= $dl('sales_all', $sFrom, $sTo) ?>"><?= icon('download') ?>Sales CSV</a>
   </div>
 </div>
 
 <div class="kpis kpis--4">
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">All sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['all'])) ?> <?= $cmp ? $chg($tot['all'], $otot['all']) : '' ?></strong><span class="kpi__s"><?= $cmp ? 'vs ' . h(date('M', strtotime($prevMonth . '-01'))) . ' ' . h(inr_short($otot['all'])) : 'From the main sale sheet' ?> · <?= number_format($tot['orders']) ?> orders</span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">All sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['all'])) ?> <?= $cmp ? $chg($tot['all'], $otot['all']) : '' ?></strong><span class="kpi__s"><?= $cmp ? 'vs ' . h($prevLabel) . ' ' . h(inr_short($otot['all'])) : 'From the main sale sheet' ?> · <?= number_format($tot['orders']) ?> orders</span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Online</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['online'])) ?> <?= $cmp ? $chg($tot['online'], $otot['online']) : '' ?></strong><span class="kpi__s"><?= $share($tot['online'], $tot['all']) ?>% of all sales</span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Offline</span><span class="kpi__ic kpi__ic--warn"><?= icon('users') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['offline'])) ?> <?= $cmp ? $chg($tot['offline'], $otot['offline']) : '' ?></strong><span class="kpi__s"><?= $tot['offline'] > 0 ? $share($tot['offline'], $tot['all']) . '% of all sales' : 'No offline sales entered yet' ?></span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= !empty($tot['sheet_spend']) ? 'Online ad spend' : 'Marketplace ad spend' ?></span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas(!empty($tot['sheet_spend']) ? $tot['online'] : $tot['mp_sales'], $tot['spend'])) ?> on <?= !empty($tot['sheet_spend']) ? 'all online sales' : 'marketplaces' ?></span></div>
@@ -71,15 +73,15 @@ layout_head('Sales overview');
 
 <?php if ($tot['spend'] > 0):
   $dim = (int)date('t', strtotime($month . '-01'));
-  $elapsed = $month < substr($today, 0, 7) ? $dim : ($month > substr($today, 0, 7) ? 0 : (int)date('j', strtotime($today)));
-  $elapsed = max(1, min($dim, $elapsed));
+  if ($P['isMonth']) { $elapsed = $month < substr($today, 0, 7) ? $dim : ($month > substr($today, 0, 7) ? 0 : (int)date('j', strtotime($today))); $elapsed = max(1, min($dim, $elapsed)); }
+  else { $elapsed = $P['days']; }
   $roas = $tot['online'] > 0 ? $tot['online'] / $tot['spend'] : 0.0;
   $oroas = $cmp && ($otot['spend'] ?? 0) > 0 ? $otot['online'] / $otot['spend'] : 0.0;
   $spPct = $tot['online'] > 0 ? $tot['spend'] / $tot['online'] * 100 : 0.0;
   $oPct = $cmp && ($otot['online'] ?? 0) > 0 && ($otot['spend'] ?? 0) > 0 ? $otot['spend'] / $otot['online'] * 100 : 0.0;
   $net = $tot['online'] - $tot['spend'];
   $perDay = $tot['online'] / $elapsed; $spDay = $tot['spend'] / $elapsed;
-  $projS = $perDay * $dim; $projSp = $spDay * $dim;
+  $projS = $perDay * $dim; $projSp = $spDay * $dim; $isM = $P['isMonth'];
   $lines = array_values(array_filter($cur['rows'], fn($r) => ($r['kind'] === 'online') && ($r['in_total'] ?? true) !== false && $r['spend'] > 0));
   usort($lines, fn($a, $b) => ($b['sales'] / max(1, $b['spend'])) <=> ($a['sales'] / max(1, $a['spend'])));
   $best = $lines[0] ?? null; $worst = count($lines) > 1 ? $lines[count($lines) - 1] : null;
@@ -91,13 +93,13 @@ layout_head('Sales overview');
   };
 ?>
 <div class="kpis kpis--4">
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">ROAS (online)</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(number_format($roas, 2)) ?>x <?= $rd($roas, $oroas) ?></strong><span class="kpi__s">Every ₹1 of ads brought ₹<?= h(number_format($roas, 2)) ?><?= $oroas > 0 ? ' · last month ' . h(number_format($oroas, 2)) . 'x' : '' ?></span></div>
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Spend per ₹100 sold</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v">₹<?= h(number_format($spPct, 1)) ?> <?= $rd($spPct, $oPct, false) ?></strong><span class="kpi__s">Ad cost as % of online sales<?= $oPct > 0 ? ' · last month ' . h(number_format($oPct, 1)) . '%' : '' ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">ROAS (online)</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(number_format($roas, 2)) ?>x <?= $rd($roas, $oroas) ?></strong><span class="kpi__s">Every ₹1 of ads brought ₹<?= h(number_format($roas, 2)) ?><?= $oroas > 0 ? ' · ' . h($prevLabel) . ' ' . h(number_format($oroas, 2)) . 'x' : '' ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Spend per ₹100 sold</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v">₹<?= h(number_format($spPct, 1)) ?> <?= $rd($spPct, $oPct, false) ?></strong><span class="kpi__s">Ad cost as % of online sales<?= $oPct > 0 ? ' · ' . h($prevLabel) . ' ' . h(number_format($oPct, 1)) . '%' : '' ?></span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Sales after ad spend</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($net)) ?></strong><span class="kpi__s">Online sales − ad spend, before product cost</span></div>
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Month-end at this pace</span><span class="kpi__ic"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($projS)) ?></strong><span class="kpi__s"><?= h(inr_short($perDay)) ?> sales and <?= h(inr_short($spDay)) ?> spend a day · spend <?= h(inr_short($projSp)) ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= $isM ? 'Month-end at this pace' : 'Average a day' ?></span><span class="kpi__ic"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($isM ? $projS : $perDay)) ?></strong><span class="kpi__s"><?= $isM ? h(inr_short($perDay)) . ' sales and ' . h(inr_short($spDay)) . ' spend a day · spend ' . h(inr_short($projSp)) : h(inr_short($spDay)) . ' spend a day over ' . (int)$elapsed . ' day' . ($elapsed > 1 ? 's' : '') ?></span></div>
 </div>
 <section class="card">
-  <div class="card__h"><h2>Spend and return by line</h2><span class="muted tiny">Spend is the monthly figure from the main sheet<?= $elapsed < $dim ? ' (month to date)' : '' ?></span></div>
+  <div class="card__h"><h2>Spend and return by line</h2><span class="muted tiny">Spend comes from the main sheet's monthly figure<?= $P['isMonth'] ? ($elapsed < $dim ? ' (month to date)' : '') : ', shared out by day' ?></span></div>
   <?php if ($best): ?><p class="muted" style="margin:0 0 12px">Best return: <strong><?= h($best['label']) ?></strong> at <?= h(ecom_roas((float)$best['sales'], (float)$best['spend'])) ?><?php if ($worst): ?> · weakest: <strong><?= h($worst['label']) ?></strong> at <?= h(ecom_roas((float)$worst['sales'], (float)$worst['spend'])) ?><?php endif; ?>.</p><?php endif; ?>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Line</th><th class="r">Sales</th><th class="r">Ad spend</th><th class="r">Share of spend</th><th class="r">ROAS</th><th class="r hm">Spend per ₹100</th><th class="r hm">Sales after spend</th><th class="r hm">Sales a day</th></tr></thead><tbody>
   <?php foreach ($lines as $r): $ro = $r['sales'] / $r['spend']; ?>
@@ -123,7 +125,7 @@ layout_head('Sales overview');
   <?php if ($kind === 'offline' && $sub <= 0): ?>
     <p class="muted">No offline sales have been entered for this month. <?php if (can_enter_channels($me)): ?><a href="<?= h(url('channels')) ?>">Add offline sales</a><?php else: ?>Ask the admin or the sales team to add them under "Other sales".<?php endif; ?></p>
   <?php endif; ?>
-  <div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Share</th><th class="r">Orders</th><?php if ($kind === 'online'): ?><th class="r hm">Ad spend</th><th class="r hm">ROAS</th><?php endif; ?><th class="r">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?></th><th class="r hm">Last data</th></tr></thead><tbody>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Share</th><th class="r">Orders</th><?php if ($kind === 'online'): ?><th class="r hm">Ad spend</th><th class="r hm">ROAS</th><?php endif; ?><th class="r">vs <?= h($prevLabel) ?></th><th class="r hm">Last data</th></tr></thead><tbody>
   <?php foreach ($rs as $r): $o = $oldBy[$r['key']]['sales'] ?? 0; $isSh = $r['key'] === 'shopify'; $inc = ($r['in_total'] ?? true) === false; ?>
     <tr<?= $isSh ? ' style="background:var(--soft)"' : ($inc ? ' style="opacity:.72"' : '') ?>>
       <td><?= $r['platform'] ? '<span class="pcell">' . ecom_logo($r['platform'], 26) . h($r['label']) . '</span>' : '<strong>' . h($r['label']) . '</strong>' ?><?= !empty($r['src']) && !$inc ? ' <span class="chip" title="Total from the main sale sheet">Main sheet</span>' : '' ?><?= $inc ? ' <span class="chip" title="Shown for detail. Already inside ' . h((string)$r['part_of']) . ', so it is not added again.">Inside ' . h((string)$r['part_of']) . '</span>' : '' ?><?= isset($r['detail']) && $r['detail'] > 0 && abs($r['detail'] - $r['sales']) > 1 ? ' <span class="muted tiny" title="What the platform sheet shows for the same month">platform sheet ' . h(inr_short((float)$r['detail'])) . '</span>' : '' ?></td>
@@ -131,7 +133,7 @@ layout_head('Sales overview');
       <td class="r"><?= $inc ? '<span class="muted">–</span>' : $share($r['sales'], $sub) . '%' ?></td>
       <td class="r"><?= number_format($r['orders']) ?></td>
       <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas((float)(isset($r['detail_spend']) ? $r['sales'] : ($r['detail'] ?? $r['sales'])), $r['spend'])) : '–' ?></td><?php endif; ?>
-      <td class="r"><?= (empty($r['src']) && empty($oldBy[$r['key']]['src'])) ? ($chg($r['sales'], (float)$o) ?: '–') : '–' ?></td>
+      <td class="r"><?= (empty($r['src']) === empty($oldBy[$r['key']]['src'])) ? ($chg($r['sales'], (float)$o) ?: '–') : '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>
     <?php if ($isSh): foreach ($r['subs'] as $sr): ?>

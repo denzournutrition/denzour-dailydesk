@@ -94,12 +94,18 @@ function ceo_sales(string $from, string $to): array
     // the platform-wise sheets keep supplying the split and the ad spend, shown but never added a second time.
     $used = []; $skip = [];
     $ents = track_load(substr($from, 0, 7))['ents'];
-    // Total spend per name from the main sheet (Summary tab "Total Spending"), shared out by the days asked for
+    // Total spend per name from the main sheet (Summary tab "Total Spending"), shared out over the days asked for (month by month)
     $spendBy = []; $sheetSpend = false;
-    $mStart = substr($from, 0, 7) . '-01'; $dim = (int)date('t', strtotime($mStart)); $mEnd = substr($from, 0, 7) . '-' . $dim;
-    $a = max($from, $mStart); $b = min($to, $mEnd);
-    $frac = $b >= $a ? ((strtotime($b) - strtotime($a)) / 86400 + 1) / $dim : 0.0;
-    foreach ($ents as $e) { if (($e['spend'] ?? 0) > 0) { $sheetSpend = true; } $spendBy[track_key($e['name'])] = (float)($e['spend'] ?? 0) * $frac; }
+    for ($mm = substr($from, 0, 7), $g = 0; $mm <= substr($to, 0, 7) && $g < 36; $g++, $mm = date('Y-m', strtotime($mm . '-01 +1 month'))) {
+        $mStart = $mm . '-01'; $dim = (int)date('t', strtotime($mStart)); $mEnd = $mm . '-' . $dim;
+        $a = max($from, $mStart); $b = min($to, $mEnd);
+        $frac = $b >= $a ? ((strtotime($b) - strtotime($a)) / 86400 + 1) / $dim : 0.0;
+        foreach (track_load($mm)['ents'] as $e) {
+            $sp = (float)($e['spend'] ?? 0);
+            if ($sp > 0) { $sheetSpend = true; }
+            $spendBy[track_key($e['name'])] = ($spendBy[track_key($e['name'])] ?? 0.0) + $sp * $frac;
+        }
+    }
     foreach (track_sales_between($from, $to) as $tk => $t) {
         if ($t['sales'] <= 0) { continue; }
         $hit = null;
@@ -203,4 +209,51 @@ function tasks_month(string $month): array
     $st = $pdo->prepare('SELECT t.category c, SUM(t.hours) h FROM tasks t JOIN reports r ON r.id = t.report_id WHERE r.report_date BETWEEN ? AND ? GROUP BY t.category ORDER BY h DESC'); $st->execute([$s, $e]);
     foreach ($st as $r) { $cat[$r['c']] = (float)$r['h']; }
     return ['per' => array_values($per), 'cat' => $cat, 'wd' => count(working_days($s, min($e, today())))];
+}
+
+
+/** The period a dashboard shows: today, yesterday, 7 days, 30 days or one month (?range= and ?month=). */
+function period_pick(): array
+{
+    $today = today();
+    $k = (string)($_GET['range'] ?? 'month');
+    if (!in_array($k, ['today', 'yesterday', '7d', '30d', 'month'], true)) { $k = 'month'; }
+    $month = s_month($_GET['month'] ?? null);
+    switch ($k) {
+        case 'today':     $f = $t = $today; $label = 'Today'; break;
+        case 'yesterday': $f = $t = add_days($today, -1); $label = 'Yesterday'; break;
+        case '7d':        $f = add_days($today, -6); $t = $today; $label = 'Last 7 days'; break;
+        case '30d':       $f = add_days($today, -29); $t = $today; $label = 'Last 30 days'; break;
+        default:
+            [$f, $t] = s_month_range($month); $label = date('F Y', strtotime($month . '-01'));
+    }
+    if ($k === 'month') {
+        $pm = date('Y-m', strtotime($month . '-01 -1 month')); [$pf, $pt] = s_month_range($pm); $plabel = date('M', strtotime($pm . '-01'));
+    } else {
+        $n = (int)round((strtotime($t) - strtotime($f)) / 86400) + 1; $pf = add_days($f, -$n); $pt = add_days($f, -1);
+        $plabel = $k === 'today' ? 'yesterday' : ($k === 'yesterday' ? 'day before' : 'previous ' . $n . ' days');
+    }
+    $mon = $k === 'month' ? $month : substr($t, 0, 7);
+    $days = (int)round((strtotime(min($t, $today)) - strtotime($f)) / 86400) + 1;
+    return ['key' => $k, 'from' => $f, 'to' => $t, 'label' => $label, 'month' => $mon, 'pf' => $pf, 'pt' => $pt, 'plabel' => $plabel, 'days' => max(1, $days), 'isMonth' => $k === 'month'];
+}
+
+/** Today / Yesterday / 7 days / 30 days / Month switch (a small form). */
+function period_bar(string $page, array $P, array $keep = []): string
+{
+    $o = '<form method="get" class="filters" style="margin:0"><input type="hidden" name="p" value="' . h($page) . '">';
+    foreach ($keep as $k => $v) { $o .= '<input type="hidden" name="' . h($k) . '" value="' . h((string)$v) . '">'; }
+    $o .= '<div class="seg" role="group" aria-label="Period">';
+    foreach (['today' => 'Today', 'yesterday' => 'Yesterday', '7d' => '7 days', '30d' => '30 days', 'month' => 'Month'] as $k => $l) {
+        $o .= '<label><input type="radio" name="range" value="' . $k . '"' . ($P['key'] === $k ? ' checked' : '') . ' data-autosubmit><span>' . $l . '</span></label>';
+    }
+    $o .= '</div>';
+    if ($P['key'] === 'month') {
+        $o .= '<label class="field"><span class="sr">Month</span><select name="month" data-autosubmit>';
+        $opts = []; for ($i = 0; $i < 12; $i++) { $opts[] = date('Y-m', strtotime(substr(today(), 0, 7) . '-01 -' . $i . ' month')); }
+        if (!in_array($P['month'], $opts, true)) { array_unshift($opts, $P['month']); }
+        foreach ($opts as $m) { $o .= '<option value="' . h($m) . '"' . ($m === $P['month'] ? ' selected' : '') . '>' . h(date('F Y', strtotime($m . '-01'))) . '</option>'; }
+        $o .= '</select></label>';
+    }
+    return $o . '</form>';
 }

@@ -2,8 +2,8 @@
 defined('DD') or exit;
 $u = user();
 if (!conn_can($u, 'ads')) { http_response_code(403); layout_head('Not allowed'); echo '<div class="card"><h1>Not allowed</h1></div>'; layout_foot(); exit; }
-$month = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['month'] ?? '')) ? (string)$_GET['month'] : substr(today(), 0, 7);
-[$from, $to] = s_month_range($month);
+$P = period_pick(); $month = $P['month'];
+$from = $P['from']; $to = min($P['to'], today());
 $d = ads_summary($from, $to);
 $months = []; for ($i = 0; $i < 12; $i++) { $months[] = date('Y-m', strtotime(substr(today(), 0, 7) . '-01 -' . $i . ' month')); }
 $spend = array_sum(array_column($d['by'], 'spend')); $sales = array_sum(array_column($d['by'], 'sales')); $pur = array_sum(array_column($d['by'], 'pur')); $clk = array_sum(array_column($d['by'], 'clk'));
@@ -11,10 +11,10 @@ $roas = fn($s, $sp) => $sp > 0 ? number_format($s / $sp, 2) . 'x' : '–';
 $connected = (int)db()->query('SELECT COUNT(*) FROM conn WHERE kind IN ("meta_ads","google_ads")')->fetchColumn();
 layout_head('Ads and creatives');
 ?>
-<div class="pagehead"><div><h1>Ads and creatives</h1><p class="muted">Meta and Google ad spend, sales and ROAS · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
-  <div class="pagehead__r"><form method="get" class="filters" style="margin:0"><input type="hidden" name="p" value="ads"><label class="field"><span class="sr">Month</span><select name="month" data-autosubmit><?php foreach ($months as $m): ?><option value="<?= h($m) ?>" <?= $m === $month ? 'selected' : '' ?>><?= h(date('F Y', strtotime($m . '-01'))) ?></option><?php endforeach; ?></select></label></form></div></div>
+<div class="pagehead"><div><h1>Ads and creatives</h1><p class="muted">Meta and Google ad spend, sales and ROAS · <?= h($P['label']) ?></p></div>
+  <div class="pagehead__r"><?= period_bar('ads', $P) ?></div></div>
 <?php if (!$d['by']): ?>
-<section class="card"><p class="muted" style="margin:0"><?= $connected ? 'No ad data for this month yet.' : 'Meta Ads and Google Ads are not connected yet.' ?> <?php if ($u['role'] === 'admin'): ?><a href="<?= h(url('conn')) ?>">Open Connections</a><?php else: ?>Ask your admin to connect them.<?php endif; ?></p></section>
+<section class="card"><p class="muted" style="margin:0"><?= $connected ? 'No ad data for this period yet.' : 'Meta Ads and Google Ads are not connected yet.' ?> <?php if ($u['role'] === 'admin'): ?><a href="<?= h(url('conn')) ?>">Open Connections</a><?php else: ?>Ask your admin to connect them.<?php endif; ?></p></section>
 <?php else: ?>
 <div class="kpis kpis--4">
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Ad spend</span></div><strong class="kpi__v"><?= h(inr_short($spend)) ?></strong></div>
