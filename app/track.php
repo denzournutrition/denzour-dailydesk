@@ -25,6 +25,8 @@ function track_migrate(PDO $pdo): void
         month TEXT NOT NULL, name TEXT NOT NULL, day INTEGER NOT NULL, achieved REAL NOT NULL DEFAULT 0, user_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (month, name, day))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS track_meta (month TEXT PRIMARY KEY, synced_at TEXT NOT NULL DEFAULT '')");
+    $tc = array_column($pdo->query('PRAGMA table_info(track_targets)')->fetchAll(), 'name');
+    if ($tc && !in_array('spend', $tc, true)) { $pdo->exec('ALTER TABLE track_targets ADD COLUMN spend REAL NOT NULL DEFAULT 0'); }
     $cols = array_column($pdo->query('PRAGMA table_info(gsync_links)')->fetchAll(), 'name');
     if ($cols && !in_array('month', $cols, true)) {
         $pdo->exec("ALTER TABLE gsync_links ADD COLUMN month TEXT NOT NULL DEFAULT ''");
@@ -89,12 +91,14 @@ function track_parse(string $path): array
 
     // names: prefer the Summary tab's names (same order) when the counts match
     $names = array_map(fn($a) => $a[1], $ach);
-    $monthly = [];
+    $monthly = []; $spend = [];
     if ($summary) {
         $sh = null; $sumNames = [];
         foreach ($summary['rows'] as $ri => $r) {
             foreach ($r as $ci => $c) { if (preg_match('/monthly\s*target/i', (string)$c)) { $sh = [$ri, $ci]; break 2; } }
         }
+        $spCol = null;
+        if ($sh) { foreach ($summary['rows'][$sh[0]] as $ci => $c) { if (preg_match('/spend|spending/i', (string)$c)) { $spCol = $ci; break; } } }
         if ($sh) {
             for ($ri = $sh[0] + 1; $ri < count($summary['rows']); $ri++) {
                 $r = $summary['rows'][$ri];
@@ -102,6 +106,7 @@ function track_parse(string $path): array
                 if ($nm === '' || preg_match('/^total/i', $nm)) { if (preg_match('/^total/i', $nm)) { break; } continue; }
                 $sumNames[] = $nm;
                 $monthly[track_key($nm)] = s_amount($r[$sh[1]] ?? 0);
+                if ($spCol !== null) { $spend[track_key($nm)] = s_amount($r[$spCol] ?? 0); }
             }
             if (count($sumNames) === count($ach)) { $names = $sumNames; }
         }
@@ -127,6 +132,7 @@ function track_parse(string $path): array
     }
     foreach ($ents as $nm => &$e) {
         $sum = 0.0; foreach ($e['days'] as $x) { $sum += $x['t']; }
+        $e['spend'] = $spend[track_key($nm)] ?? 0.0;
         $e['monthly'] = $monthly[track_key($nm)] ?? $sum;
         if ($e['monthly'] <= 0) { $e['monthly'] = $sum; }
     }
@@ -144,10 +150,10 @@ function track_import(string $path, string $month): string
     try {
         $pdo->prepare('DELETE FROM track_targets WHERE month = ?')->execute([$month]);
         $pdo->prepare('DELETE FROM track_daily WHERE month = ?')->execute([$month]);
-        $it = $pdo->prepare('INSERT INTO track_targets (month, name, kind, monthly, sort) VALUES (?,?,?,?,?)');
+        $it = $pdo->prepare('INSERT INTO track_targets (month, name, kind, monthly, sort, spend) VALUES (?,?,?,?,?,?)');
         $id = $pdo->prepare('INSERT INTO track_daily (month, name, day, achieved, target) VALUES (?,?,?,?,?)');
         foreach ($p['ents'] as $nm => $e) {
-            $it->execute([$month, $nm, $e['kind'], $e['monthly'], $e['sort']]);
+            $it->execute([$month, $nm, $e['kind'], $e['monthly'], $e['sort'], (float)($e['spend'] ?? 0)]);
             foreach ($e['days'] as $d => $x) { $id->execute([$month, $nm, $d, $x['a'], $x['t']]); }
         }
         $pdo->prepare('INSERT INTO track_meta (month, synced_at) VALUES (?,?) ON CONFLICT(month) DO UPDATE SET synced_at = excluded.synced_at')->execute([$month, date('Y-m-d H:i:s')]);
@@ -288,7 +294,7 @@ function track_load_raw(string $month): array
     $todayDay = $month === $cur ? (int)date('j') : ($month < $cur ? $dim : 0);
     $st = $pdo->prepare('SELECT * FROM track_targets WHERE month = ? ORDER BY sort, name'); $st->execute([$month]);
     $ents = [];
-    foreach ($st->fetchAll() as $r) { $ents[$r['name']] = ['name' => $r['name'], 'kind' => $r['kind'], 'monthly' => (float)$r['monthly'], 'days' => []]; }
+    foreach ($st->fetchAll() as $r) { $ents[$r['name']] = ['name' => $r['name'], 'kind' => $r['kind'], 'monthly' => (float)$r['monthly'], 'spend' => (float)($r['spend'] ?? 0), 'days' => []]; }
     $st = $pdo->prepare('SELECT * FROM track_daily WHERE month = ?'); $st->execute([$month]);
     foreach ($st->fetchAll() as $r) {
         if (isset($ents[$r['name']])) { $ents[$r['name']]['days'][(int)$r['day']] = ['a' => $r['achieved'] === null ? null : (float)$r['achieved'], 't' => (float)$r['target']]; }

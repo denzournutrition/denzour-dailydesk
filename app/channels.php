@@ -94,6 +94,12 @@ function ceo_sales(string $from, string $to): array
     // the platform-wise sheets keep supplying the split and the ad spend, shown but never added a second time.
     $used = []; $skip = [];
     $ents = track_load(substr($from, 0, 7))['ents'];
+    // Total spend per name from the main sheet (Summary tab "Total Spending"), shared out by the days asked for
+    $spendBy = []; $sheetSpend = false;
+    $mStart = substr($from, 0, 7) . '-01'; $dim = (int)date('t', strtotime($mStart)); $mEnd = substr($from, 0, 7) . '-' . $dim;
+    $a = max($from, $mStart); $b = min($to, $mEnd);
+    $frac = $b >= $a ? ((strtotime($b) - strtotime($a)) / 86400 + 1) / $dim : 0.0;
+    foreach ($ents as $e) { if (($e['spend'] ?? 0) > 0) { $sheetSpend = true; } $spendBy[track_key($e['name'])] = (float)($e['spend'] ?? 0) * $frac; }
     foreach (track_sales_between($from, $to) as $tk => $t) {
         if ($t['sales'] <= 0) { continue; }
         $hit = null;
@@ -102,6 +108,7 @@ function ceo_sales(string $from, string $to): array
             if ($rk === $tk || str_starts_with($rk, $tk)) { $hit = $i; break; }
         }
         if ($hit !== null) {
+            if ($sheetSpend) { $rows[$hit]['detail_spend'] = $rows[$hit]['spend']; $rows[$hit]['spend'] = $spendBy[$tk] ?? 0.0; }
             $rows[$hit]['detail'] = $rows[$hit]['sales']; $rows[$hit]['sales'] = $t['sales']; $rows[$hit]['kind'] = $t['kind']; $rows[$hit]['src'] = 'tracker';
             if ($rows[$hit]['key'] === 'shopify') {
                 $skip['web'] = true;
@@ -111,7 +118,7 @@ function ceo_sales(string $from, string $to): array
             $used[$tk] = $t['days'];
         } else {
             $rows[] = ['key' => 't:' . $tk, 'label' => $t['label'], 'group' => $t['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $t['kind'], 'sales' => $t['sales'], 'orders' => 0,
-                'spend' => 0.0, 'days' => count($t['days']), 'last' => max(array_keys($t['days'])), 'platform' => '', 'src' => 'tracker'];
+                'spend' => $sheetSpend ? ($spendBy[$tk] ?? 0.0) : 0.0, 'days' => count($t['days']), 'last' => max(array_keys($t['days'])), 'platform' => '', 'src' => 'tracker'];
             $used[$tk] = $t['days'];
         }
     }
@@ -134,13 +141,15 @@ function ceo_sales(string $from, string $to): array
     ceo_skip(substr($from, 0, 7), $skip);
     $tot = ['online' => 0.0, 'offline' => 0.0, 'orders' => 0, 'spend' => 0.0, 'mp_sales' => 0.0];
     foreach ($rows as $r) {
-        $tot['spend'] += $r['spend'];
+        if (!($sheetSpend && ($r['in_total'] ?? true) === false)) { $tot['spend'] += $r['spend']; } // spend of lines inside another line is already in that line's figure
+
         if ($r['group'] === 'Marketplace') { $tot['mp_sales'] += $r['detail'] ?? $r['sales']; }
         if (($r['in_total'] ?? true) === false) { continue; }
         $tot[$r['kind']] += $r['sales'];
         $tot['orders'] += $r['orders'];
     }
     $tot['all'] = $tot['online'] + $tot['offline'];
+    $tot['sheet_spend'] = $sheetSpend;
     return ['rows' => $rows, 'tot' => $tot, 'web_entered' => $entered];
 }
 

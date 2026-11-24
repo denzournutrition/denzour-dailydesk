@@ -63,7 +63,7 @@ layout_head('Sales overview');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">All sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['all'])) ?> <?= $chg($tot['all'], $otot['all']) ?></strong><span class="kpi__s">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?> <?= h(inr_short($otot['all'])) ?> · <?= number_format($tot['orders']) ?> orders</span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Online</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['online'])) ?> <?= $chg($tot['online'], $otot['online']) ?></strong><span class="kpi__s"><?= $share($tot['online'], $tot['all']) ?>% of all sales</span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Offline</span><span class="kpi__ic kpi__ic--warn"><?= icon('users') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['offline'])) ?> <?= $chg($tot['offline'], $otot['offline']) ?></strong><span class="kpi__s"><?= $tot['offline'] > 0 ? $share($tot['offline'], $tot['all']) . '% of all sales' : 'No offline sales entered yet' ?></span></div>
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Marketplace ad spend</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas($tot['mp_sales'], $tot['spend'])) ?> on marketplaces</span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= !empty($tot['sheet_spend']) ? 'Online ad spend' : 'Marketplace ad spend' ?></span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas(!empty($tot['sheet_spend']) ? $tot['online'] : $tot['mp_sales'], $tot['spend'])) ?> on <?= !empty($tot['sheet_spend']) ? 'all online sales' : 'marketplaces' ?></span></div>
 </div>
 
 <?php $td = track_load($month); if ($td['ents']): $tt = $td['tot']; ?>
@@ -108,7 +108,7 @@ layout_head('Sales overview');
 
 <section class="card">
   <h2>Last 6 months</h2>
-  <div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="r">Online</th><th class="r">Offline</th><th class="r">All sales</th><th class="r hm">Orders</th><th class="r hm">Marketplace ad spend</th></tr></thead><tbody>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="r">Online</th><th class="r">Offline</th><th class="r">All sales</th><th class="r hm">Orders</th><th class="r hm">Ad spend</th></tr></thead><tbody>
   <?php foreach (array_reverse($trend) as $t): ?>
     <tr><td><a href="<?= h(url('ceo', ['month' => $t['m']])) ?>"><?= h(date('F Y', strtotime($t['m'] . '-01'))) ?></a></td><td class="r"><?= h(inr_short($t['on'])) ?></td><td class="r"><?= $t['off'] > 0 ? h(inr_short($t['off'])) : '–' ?></td><td class="r"><strong><?= h(inr_short($t['all'])) ?></strong></td><td class="r hm"><?= number_format($t['orders']) ?></td><td class="r hm"><?= h(inr_short($t['spend'])) ?></td></tr>
   <?php endforeach; ?></tbody></table></div>
