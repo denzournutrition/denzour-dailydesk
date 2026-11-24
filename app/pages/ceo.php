@@ -119,6 +119,29 @@ layout_head('Sales overview');
 </section>
 <?php endif; ?>
 
+<?php $ppl = track_people_between($sFrom, min($sTo, $today)); if ($ppl):
+  $ppl0 = []; foreach (track_people_between($P['pf'], $P['pt']) as $q) { $ppl0[track_key($q['name'])] = $q; }
+  $pAll = array_sum(array_column($ppl, 'sales')); $pTg = array_sum(array_column($ppl, 'target'));
+?>
+<section class="card">
+  <div class="card__h"><h2>Sales by person</h2><span class="muted tiny"><?= h($P['label']) ?> · from the main sale sheet</span></div>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Person</th><th class="r">Sales</th><th class="r">Target for these days</th><th class="r">Achieved</th><th class="r">Share of people's sales</th><th class="r">vs <?= h($prevLabel) ?></th></tr></thead><tbody>
+  <?php foreach ($ppl as $q): $k = track_key($q['name']); $o0 = $ppl0[$k] ?? null; $pc = $q['target'] > 0 ? $q['sales'] / $q['target'] * 100 : 0; ?>
+    <tr>
+      <td><strong><?= h($q['name']) ?></strong><?= $q['filled'] === 0 ? ' <span class="chip chip--warn" title="No figure typed in the sheet for these days">not filled</span>' : '' ?></td>
+      <td class="r"><strong><?= h(inr($q['sales'])) ?></strong></td>
+      <td class="r"><?= $q['target'] > 0 ? h(inr($q['target'])) : '–' ?></td>
+      <td class="r"><?php if ($q['target'] > 0 && $q['filled'] > 0): ?><span class="<?= $pc >= 100 ? 'good' : ($pc < 50 ? 'bad' : '') ?>"><?= (int)round($pc) ?>%</span><?php else: ?>–<?php endif; ?></td>
+      <td class="r"><?= $pAll > 0 && $q['filled'] > 0 ? $share($q['sales'], $pAll) . '%' : '–' ?></td>
+      <td class="r"><?= ($o0 && $o0['filled'] > 0 && $q['filled'] > 0) ? ($chg($q['sales'], (float)$o0['sales']) ?: '–') : '–' ?></td>
+    </tr>
+  <?php endforeach; ?>
+    <tr style="background:var(--soft)"><td><strong>All people</strong></td><td class="r"><strong><?= h(inr($pAll)) ?></strong></td><td class="r"><?= $pTg > 0 ? h(inr($pTg)) : '–' ?></td><td class="r"><?= $pTg > 0 ? (int)round($pAll / $pTg * 100) . '%' : '–' ?></td><td class="r">100%</td><td class="r">–</td></tr>
+  </tbody></table></div>
+  <p class="muted tiny" style="margin-top:10px">Amazon, Flipkart and Shopify are in the platform table below. Ritik's line already includes Blinkit, Myntra, Hyugalife and Tata 1mg.</p>
+</section>
+<?php endif; ?>
+
 <?php foreach (['online' => 'Online sales, by platform', 'offline' => 'Offline sales'] as $kind => $title): $rs = array_values(array_filter($cur['rows'], fn($r) => $r['kind'] === $kind)); $sub = $tot[$kind]; ?>
 <section class="card">
   <div class="card__h"><h2><?= h($title) ?></h2><strong><?= h(inr($sub)) ?></strong></div>

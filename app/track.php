@@ -562,3 +562,26 @@ function track_platform_owner(string $platform, array $ents): string
     foreach ($ents as $e) { if ($e['kind'] === 'person' && in_array((int)$e['user_id'], $ids, true) && $e['channel'] !== 'none' && $e['parent'] === '') { return track_key($e['name']); } }
     return '';
 }
+
+
+/** What each person sold between two dates (from the main sale sheet), with the daily targets of those days. */
+function track_people_between(string $from, string $to): array
+{
+    $out = [];
+    $m = substr($from, 0, 7); $end = substr($to, 0, 7);
+    for ($g = 0; $m <= $end && $g < 36; $g++, $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
+        foreach (track_load($m)['ents'] as $e) {
+            if ($e['kind'] !== 'person') { continue; }
+            $k = track_key($e['name']);
+            $out[$k] ??= ['name' => $e['name'], 'sales' => 0.0, 'target' => 0.0, 'filled' => 0, 'days' => 0, 'user_id' => (int)($e['user_id'] ?? 0), 'order' => count($out)];
+            foreach ($e['days'] as $day => $x) {
+                $date = $m . '-' . str_pad((string)$day, 2, '0', STR_PAD_LEFT);
+                if ($date < $from || $date > $to) { continue; }
+                $out[$k]['days']++;
+                $out[$k]['target'] += (float)$x['t'];
+                if ($x['a'] !== null) { $out[$k]['sales'] += (float)$x['a']; $out[$k]['filled']++; }
+            }
+        }
+    }
+    return array_values($out);
+}
