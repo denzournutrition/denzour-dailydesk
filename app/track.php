@@ -29,6 +29,19 @@ function track_migrate(PDO $pdo): void
     if ($cols && !in_array('month', $cols, true)) {
         $pdo->exec("ALTER TABLE gsync_links ADD COLUMN month TEXT NOT NULL DEFAULT ''");
     }
+    // One-time: connect the Nov 2026 main sale sheet (month left empty = follows the current month, so Dec/Jan just work)
+    try {
+        $sid = '1SbtZgufnNUcODi_aC9nzzbDyVDsamU9YYXU4wfokyGc';
+        $seeded = $pdo->query("SELECT 1 FROM settings WHERE k = 'seed_main_sheet'")->fetchColumn();
+        if (!$seeded) {
+            $has = $pdo->prepare('SELECT 1 FROM gsync_links WHERE sheet_id = ?'); $has->execute([$sid]);
+            if (!$has->fetchColumn()) {
+                $pdo->prepare("INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at, month) VALUES (?,?,?,?,?,?,?,?)")
+                    ->execute(['Main sale sheet', 'targets', 0, $sid, 'https://docs.google.com/spreadsheets/d/' . $sid . '/edit', 15, date('Y-m-d H:i:s'), '']);
+            }
+            $pdo->prepare("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_main_sheet', '1')")->execute();
+        }
+    } catch (Throwable $e) { /* never block start-up */ }
 }
 
 function track_key(string $n): string
