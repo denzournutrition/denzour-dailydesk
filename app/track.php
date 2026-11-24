@@ -159,6 +159,7 @@ function track_import(string $path, string $month): string
         $pdo->prepare('INSERT INTO track_meta (month, synced_at) VALUES (?,?) ON CONFLICT(month) DO UPDATE SET synced_at = excluded.synced_at')->execute([$month, date('Y-m-d H:i:s')]);
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    try { ecom_blinkit_derive($month); } catch (Throwable $e) { /* never block the sync */ }
     $people = 0; $plat = 0;
     foreach ($p['ents'] as $e) { $e['kind'] === 'person' ? $people++ : $plat++; }
     return 'Read targets for ' . $people . ' people and ' . $plat . ' platforms (' . date('F Y', strtotime($month . '-01')) . ').';

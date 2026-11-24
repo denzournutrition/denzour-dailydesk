@@ -303,7 +303,7 @@ function ecom_commit(int $uid, string $filename, array $tabs, array $chosen, arr
     $pdo = db();
     $pdo->beginTransaction();
     $pdo->prepare('INSERT INTO ecom_uploads (user_id, filename, rows_in, created_at) VALUES (?,?,0,?)')->execute([$uid, mb_substr($filename, 0, 200), date('Y-m-d H:i:s')]);
-    $n = 0;
+    $n = 0; $bl = [];
     foreach ($chosen as $i) {
         $t = $tabs[(int)$i] ?? null;
         if (!$t || empty($t['ok'])) { continue; }
@@ -311,6 +311,10 @@ function ecom_commit(int $uid, string $filename, array $tabs, array $chosen, arr
         foreach ($t['rows'] as $r) {
             $p = $r['p'] !== '' ? $r['p'] : $fallback;
             if (!isset(ECOM_PLATFORMS[$p]) || !in_array($p, ECOM_SHEET, true)) { continue; } // Amazon and Flipkart come from the main sale sheet
+            if ($p === 'blinkit') {
+                $bm = substr($r['day'], 0, 7);
+                $bl[$bm]['days'][$r['day']] = 1; $bl[$bm]['sales'] = ($bl[$bm]['sales'] ?? 0.0) + (float)($r['sales'] ?? 0); $bl[$bm]['spend'] = ($bl[$bm]['spend'] ?? 0.0) + (float)($r['spend'] ?? 0);
+            }
             $vals = [];
             foreach ($t['cols'] as $f) {
                 if (isset($r['_s']) && (($f === 'sales' && !$r['_s']) || ($f === 'spend' && !$r['_sp']))) { continue; }
@@ -321,8 +325,57 @@ function ecom_commit(int $uid, string $filename, array $tabs, array $chosen, arr
         }
     }
     $pdo->exec('UPDATE ecom_uploads SET rows_in = ' . $n . ' WHERE id = ' . (int)$pdo->lastInsertId());
+    // Blinkit given as one month total (one or two dates only) is turned into daily figures from the main sale sheet
+    foreach ($bl as $bm => $b) {
+        if (count($b['days']) <= 2) { set_setting('blinkit_total:' . $bm, json_encode(['sales' => $b['sales'], 'spend' => $b['spend'], 'asof' => max(array_keys($b['days'])), 'uid' => $uid])); }
+        else { db()->prepare('DELETE FROM settings WHERE k = ?')->execute(['blinkit_total:' . $bm]); }
+    }
     $pdo->commit();
+    foreach (array_keys($bl) as $bm) { ecom_blinkit_derive($bm); }
     return $n;
+}
+
+/**
+ * Blinkit sent as a single month total: daily Blinkit = Ritik's main-sheet figure for the day minus Myntra, Hyugalife and Tata 1mg.
+ * Scaled so the month adds up to the Blinkit total in the platform sheet; ad spend is shared out by each day's sales.
+ */
+function ecom_blinkit_derive(string $month): void
+{
+    $raw = setting('blinkit_total:' . $month, '');
+    if ($raw === '') { return; }
+    $tot = json_decode($raw, true);
+    if (!is_array($tot) || (float)($tot['sales'] ?? 0) <= 0) { return; }
+    $pdo = db();
+    [$s, $e] = s_month_range($month);
+    $last = min($e, max($tot['asof'] ?? $s, today()));
+    $oth = [];
+    $st = $pdo->prepare("SELECT day, SUM(sales) v FROM ecom_daily WHERE platform IN ('myntra','hugulife','tata1mg') AND day BETWEEN ? AND ? GROUP BY day"); $st->execute([$s, $e]);
+    foreach ($st as $r) { $oth[$r['day']] = (float)$r['v']; }
+    $der = [];
+    foreach (track_load_raw($month)['ents'] as $en) {
+        if (track_key($en['name']) !== 'ritik') { continue; }
+        foreach ($en['days'] as $d => $x) {
+            if ($x['a'] === null) { continue; }
+            $day = $month . '-' . str_pad((string)$d, 2, '0', STR_PAD_LEFT);
+            if ($day > $last) { continue; }
+            $der[$day] = max(0.0, (float)$x['a'] - ($oth[$day] ?? 0.0));
+        }
+    }
+    $sum = array_sum($der);
+    if ($sum <= 0) { // no main-sheet figures yet: spread evenly up to the date of the total
+        $der = []; $d = $s; $to = min((string)($tot['asof'] ?? $s), $e);
+        for ($g = 0; $d <= $to && $g < 31; $g++, $d = add_days($d, 1)) { $der[$d] = 1.0; }
+        $sum = array_sum($der);
+    }
+    if ($sum <= 0) { return; }
+    $k = (float)$tot['sales'] / $sum; $sp = (float)($tot['spend'] ?? 0);
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM ecom_daily WHERE platform = 'blinkit' AND day BETWEEN ? AND ?")->execute([$s, $e]);
+        $ins = $pdo->prepare("INSERT INTO ecom_daily (platform, day, sales, orders, units, spend, user_id, src, updated_at) VALUES ('blinkit', ?, ?, 0, 0, ?, ?, 'sheet', ?)");
+        foreach ($der as $day => $v) { if ($v > 0) { $ins->execute([$day, round($v * $k, 2), round($sp * $v / $sum, 2), (int)($tot['uid'] ?? 0), date('Y-m-d H:i:s')]); } }
+        $pdo->commit();
+    } catch (Throwable $x) { $pdo->rollBack(); }
 }
 
 /* ---------- reading numbers ---------- */
