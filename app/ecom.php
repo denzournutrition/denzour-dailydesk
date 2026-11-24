@@ -15,6 +15,10 @@ const ECOM_PLATFORMS = [
     'flipkart' => ['Flipkart',  '#2874F0', '#ffffff'],
 ];
 
+/** The platform-wise sheet (Ritik's) carries these four. Amazon and Flipkart sales come from the main sale sheet. */
+const ECOM_SHEET = ['blinkit', 'myntra', 'hugulife', 'tata1mg'];
+function ecom_sheet_platforms(): array { return array_intersect_key(ECOM_PLATFORMS, array_flip(ECOM_SHEET)); }
+
 function ecom_migrate(PDO $pdo): void
 {
     $pdo->exec("CREATE TABLE IF NOT EXISTS ecom_uploads (
@@ -306,7 +310,7 @@ function ecom_commit(int $uid, string $filename, array $tabs, array $chosen, arr
         $fallback = $platformFor[(int)$i] ?? ($t['platform'] ?? '');
         foreach ($t['rows'] as $r) {
             $p = $r['p'] !== '' ? $r['p'] : $fallback;
-            if (!isset(ECOM_PLATFORMS[$p])) { continue; }
+            if (!isset(ECOM_PLATFORMS[$p]) || !in_array($p, ECOM_SHEET, true)) { continue; } // Amazon and Flipkart come from the main sale sheet
             $vals = [];
             foreach ($t['cols'] as $f) {
                 if (isset($r['_s']) && (($f === 'sales' && !$r['_s']) || ($f === 'spend' && !$r['_sp']))) { continue; }

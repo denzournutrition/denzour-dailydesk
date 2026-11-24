@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $d = (string)($_POST['day'] ?? '');
         $n = 0;
         if (valid_date($d) && $d <= $today) {
-            foreach (ECOM_PLATFORMS as $k => $_) {
+            foreach (ecom_sheet_platforms() as $k => $_) {
                 $row = (array)($_POST['p'][$k] ?? []);
                 $vals = [];
                 foreach (['sales', 'orders', 'units', 'spend'] as $f) {
@@ -91,7 +91,7 @@ layout_head('E-commerce desk');
 </div>
 
 <div class="platrow" aria-label="Updated yesterday">
-  <?php foreach (ECOM_PLATFORMS as $k => $p): $r = $by14[$yest][$k] ?? null; ?>
+  <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $by14[$yest][$k] ?? null; ?>
     <div class="platchip"><?= ecom_logo($k, 34) ?><div><strong><?= h($p[0]) ?></strong><span class="tiny <?= $r ? 'ok' : 'bad' ?>"><?= $r ? 'Yesterday: ' . h(inr_short((float)$r['sales'])) . ' sales · ' . h(inr_short((float)$r['spend'])) . ' spend' : 'Yesterday not updated' ?></span></div></div>
   <?php endforeach; ?>
 </div>
@@ -112,7 +112,7 @@ layout_head('E-commerce desk');
         <td><strong><?= h($t['name']) ?></strong><?php if ($t['ok'] && !empty($t['note'])): ?><br><span class="muted tiny"><?= h($t['note']) ?></span><?php endif; ?></td>
         <td><?php if (!$t['ok']): ?><span class="muted"><?= h($t['note']) ?></span>
           <?php elseif ($mixed): ?><span class="chip chip--ok">From the Platform column</span>
-          <?php else: ?><select name="plat[<?= $i ?>]" aria-label="Platform for <?= h($t['name']) ?>"><option value="">Choose…</option><?php foreach (ECOM_PLATFORMS as $k => $p): ?><option value="<?= h($k) ?>" <?= $t['platform'] === $k ? 'selected' : '' ?>><?= h($p[0]) ?></option><?php endforeach; ?></select><?php endif; ?></td>
+          <?php else: ?><select name="plat[<?= $i ?>]" aria-label="Platform for <?= h($t['name']) ?>"><option value="">Choose…</option><?php foreach (ecom_sheet_platforms() as $k => $p): ?><option value="<?= h($k) ?>" <?= $t['platform'] === $k ? 'selected' : '' ?>><?= h($p[0]) ?></option><?php endforeach; ?></select><?php endif; ?></td>
         <td class="tiny"><?= $t['ok'] ? h(implode(', ', array_map(fn($c) => ['sales' => 'Sales', 'orders' => 'Orders', 'units' => 'Units', 'spend' => 'Spend'][$c], $t['cols']))) : '' ?></td>
         <td class="r"><?= $t['ok'] ? count($days) . ($days ? '<br><span class="muted tiny">' . h(fmt_short($days[0])) . ' – ' . h(fmt_short(end($days))) . '</span>' : '') : '' ?></td>
         <td class="r"><?= $t['ok'] && in_array('sales', $t['cols'], true) ? h(inr($ts)) : '–' ?></td>
@@ -128,7 +128,7 @@ layout_head('E-commerce desk');
 
 <section class="card" id="upload">
   <div class="card__h"><h2>Upload sheet</h2></div>
-  <p class="muted tiny">Excel or CSV with a Date column and Sales (or GMV) and Ad spend columns. Add a Platform column to put all platforms in one sheet, or use one tab per platform named Blinkit, Myntra, Hyugalife, Tata 1mg, Amazon or Flipkart. Several rows for the same day are added together.</p>
+  <p class="muted tiny">Excel or CSV with a Date column and Sales (or GMV) and Ad spend columns. Add a Platform column to put all platforms in one sheet, or use one tab per platform named Blinkit, Myntra, Hyugalife or Tata 1mg. Several rows for the same day are added together.</p>
   <form method="post" enctype="multipart/form-data" action="<?= h($self) ?>" class="upform">
     <?= $csrf ?><input type="hidden" name="action" value="upload">
     <label class="field grow"><span>Sheet file</span><input type="file" name="sheet" accept=".xlsx,.csv" required></label>
@@ -143,7 +143,7 @@ layout_head('E-commerce desk');
   <div class="tblwrap"><table class="tbl tbl--entry">
     <thead><tr><th>Platform</th><th class="r">Sales ₹</th><th class="r">Orders</th><th class="r">Ad spend ₹</th></tr></thead>
     <tbody>
-    <?php foreach (ECOM_PLATFORMS as $k => $p): $r = $cur[$k] ?? null; ?>
+    <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $cur[$k] ?? null; ?>
       <tr><td><span class="pcell"><?= ecom_logo($k, 30) ?><strong><?= h($p[0]) ?></strong></span></td>
         <td class="r"><input class="num" inputmode="decimal" name="p[<?= h($k) ?>][sales]" value="<?= $r ? h((string)(float)$r['sales']) : '' ?>" aria-label="<?= h($p[0]) ?> sales"></td>
         <td class="r"><input class="num" inputmode="numeric" name="p[<?= h($k) ?>][orders]" value="<?= $r ? (int)$r['orders'] : '' ?>" aria-label="<?= h($p[0]) ?> orders"></td>
@@ -157,11 +157,11 @@ layout_head('E-commerce desk');
 <section class="card" aria-label="Last 14 days">
   <div class="card__h"><h2>Last 14 days</h2><span class="muted tiny">Sales / ad spend</span></div>
   <div class="tblwrap"><table class="tbl">
-    <thead><tr><th>Date</th><?php foreach (ECOM_PLATFORMS as $k => $p): ?><th class="r"><?= h($p[0]) ?></th><?php endforeach; ?></tr></thead>
+    <thead><tr><th>Date</th><?php foreach (ecom_sheet_platforms() as $k => $p): ?><th class="r"><?= h($p[0]) ?></th><?php endforeach; ?></tr></thead>
     <tbody>
     <?php for ($d = $today; $d >= $from14; $d = add_days($d, -1)): $wd = is_working_day($d); ?>
       <tr class="<?= $wd ? '' : 'is-dim' ?>"><td><?= h(fmt_date($d)) ?></td>
-        <?php foreach (ECOM_PLATFORMS as $k => $p): $r = $by14[$d][$k] ?? null; ?>
+        <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $by14[$d][$k] ?? null; ?>
           <td class="r <?= !$r && $wd && $d < $today ? 'is-low' : '' ?>"><?= $r ? h(inr_short((float)$r['sales'])) . ' <span class="muted tiny">/ ' . h(inr_short((float)$r['spend'])) . '</span>' : '–' ?></td>
         <?php endforeach; ?></tr>
     <?php endfor; ?>

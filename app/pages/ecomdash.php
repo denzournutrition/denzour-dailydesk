@@ -44,7 +44,7 @@ $daysList = []; for ($d = min($mE, $today); $d >= $mS; $d = add_days($d, -1)) { 
 layout_head('E-commerce');
 ?>
 <div class="pagehead">
-  <div><h1>E-commerce</h1><p class="muted">Blinkit, Myntra, Hyugalife, Tata 1mg, Amazon and Flipkart · sales and ad spend every day · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
+  <div><h1>E-commerce</h1><p class="muted">Blinkit, Myntra, Hyugalife and Tata 1mg · sales and ad spend every day · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
   <div class="pagehead__r"><a class="btn btn--ghost" href="<?= h(url('exports')) ?>"><?= icon('download') ?>Download data</a></div>
 </div>
 <?php s_month_filter('ecomdash', $month); ?>
@@ -57,7 +57,7 @@ layout_head('E-commerce');
 </div>
 
 <div class="platgrid">
-<?php foreach (ECOM_PLATFORMS as $k => $p): $x = $plat[$k]; ?>
+<?php foreach (ecom_sheet_platforms() as $k => $p): $x = $plat[$k]; ?>
   <section class="card platcard">
     <div class="platcard__h"><?= ecom_logo($k, 44) ?><div><h2><?= h($p[0]) ?></h2>
       <span class="tiny <?= $x['missing'] ? 'bad' : 'muted' ?>"><?= $x['last'] ? 'Last update ' . h(fmt_short($x['last'])) : 'No data yet' ?><?= $x['missing'] ? ' · ' . $x['missing'] . ' working day' . ($x['missing'] === 1 ? '' : 's') . ' missing' : '' ?></span></div></div>
@@ -79,7 +79,7 @@ layout_head('E-commerce');
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Orders</th><th class="r">Ad spend</th><th class="r">ROAS</th><th class="r hm">vs day before</th><th class="hm">Updated by</th></tr></thead>
     <tbody>
-    <?php foreach (ECOM_PLATFORMS as $k => $p): $r = $dayRows[$k] ?? null; $pr = $prev[$k] ?? null; ?>
+    <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $dayRows[$k] ?? null; $pr = $prev[$k] ?? null; ?>
       <tr><td><span class="pcell"><?= ecom_logo($k, 30) ?><strong><?= h($p[0]) ?></strong></span></td>
         <?php if (!$r): ?><td colspan="4" class="muted <?= is_working_day($day) && $day < $today ? 'is-low' : '' ?>">Not updated</td><td class="hm"></td><td class="hm"></td>
         <?php else: $dl = $pr && $pr['sales'] > 0 ? round(($r['sales'] - $pr['sales']) / $pr['sales'] * 100) : null; ?>
@@ -95,11 +95,11 @@ layout_head('E-commerce');
 <section class="card" aria-label="All days">
   <div class="card__h"><h2>Day by day</h2><span class="muted tiny">Sales / ad spend</span></div>
   <div class="tblwrap"><table class="tbl tbl--days">
-    <thead><tr><th>Date</th><?php foreach (ECOM_PLATFORMS as $k => $p): ?><th class="r"><?= h($p[0]) ?></th><?php endforeach; ?><th class="r">Total sales</th><th class="r">Total spend</th><th class="r hm">ROAS</th></tr></thead>
+    <thead><tr><th>Date</th><?php foreach (ecom_sheet_platforms() as $k => $p): ?><th class="r"><?= h($p[0]) ?></th><?php endforeach; ?><th class="r">Total sales</th><th class="r">Total spend</th><th class="r hm">ROAS</th></tr></thead>
     <tbody>
     <?php foreach ($daysList as $d): $wd = is_working_day($d); $ds = array_sum(array_column($by[$d] ?? [], 'sales')); $dp = array_sum(array_column($by[$d] ?? [], 'spend')); ?>
       <tr class="<?= $wd || isset($by[$d]) ? '' : 'is-dim' ?>"><td><a href="<?= h(url('ecomdash', ['month' => $month, 'd' => $d])) ?>"><?= h(fmt_date($d)) ?></a></td>
-        <?php foreach (ECOM_PLATFORMS as $k => $p): $r = $by[$d][$k] ?? null; ?>
+        <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $by[$d][$k] ?? null; ?>
           <td class="r <?= !$r && $wd && $d < $today ? 'is-low' : '' ?>"><?= $r ? h(inr_short((float)$r['sales'])) . ' <span class="muted tiny">/ ' . h(inr_short((float)$r['spend'])) . '</span>' : '–' ?></td>
         <?php endforeach; ?>
         <td class="r"><strong><?= $ds ? h(inr_short($ds)) : '–' ?></strong></td><td class="r"><?= $dp ? h(inr_short($dp)) : '–' ?></td><td class="r hm"><?= h(ecom_roas($ds, $dp)) ?></td></tr>
@@ -113,7 +113,7 @@ layout_head('E-commerce');
   <div class="card__h"><h2>Platform logos</h2></div>
   <p class="muted tiny">Upload each platform's own logo (PNG, JPG or WebP, under 1 MB). Until then a coloured badge is shown.</p>
   <div class="logogrid">
-  <?php foreach (ECOM_PLATFORMS as $k => $p): ?>
+  <?php foreach (ecom_sheet_platforms() as $k => $p): ?>
     <form method="post" enctype="multipart/form-data" action="<?= h($self) ?>" class="logoform">
       <?= $csrf ?><input type="hidden" name="platform" value="<?= h($k) ?>">
       <?= ecom_logo($k, 48) ?><strong><?= h($p[0]) ?></strong>
