@@ -13,13 +13,13 @@ DENZOUR DAILYDESK v9 - CALL-BACKS, REPORT REMINDERS, E-COMMERCE
   - today's report is not submitted after the reminder time (default 5:00 pm).
 - Admin changes the reminder time: Attendance > Attendance rules.
 
-3. E-COMMERCE (Blinkit, Myntra, HUGU Life, Tata 1mg)
+3. E-COMMERCE (Blinkit, Myntra, Hyugalife, Tata 1mg)
 - People > open the person > tick "Can update e-commerce sales" (or set designation
   "E-commerce Specialist"). They get "E-commerce desk" in the menu.
 - E-commerce desk: upload a sheet OR type the day's sales, orders and ad spend.
 - Sheet: Excel or CSV with a Date column and Sales (or GMV) / Orders / Ad spend columns.
   - One sheet for all platforms: add a Platform column.
-  - Or one tab per platform named Blinkit / Myntra / HUGU Life / Tata 1mg.
+  - Or one tab per platform named Blinkit / Myntra / Hyugalife / Tata 1mg.
   - Several rows for one day are added together.
   - Only the columns found are updated, so a sales sheet and a spend sheet can be uploaded separately.
   - A day that is already saved is updated with the new numbers.

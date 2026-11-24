@@ -325,7 +325,7 @@ function export_datasets(): array
         'sales_all' => ['Sales, all platforms (online and offline)', 'Every day and platform: marketplaces, website, Inside Sales and offline channels, with sales, orders and ad spend.'],
         'tasks_monthly' => ['Monthly task summary per person', 'Days reported, leave, tasks, done, blocked and hours for each person and month.'],
         'reports' => ['Daily work reports and tasks', 'All tasks with hours, category and status.'],
-        'ecom_daily' => ['E-commerce daily sales and ad spend', 'Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon and Flipkart: sales, orders, units, ad spend, ROAS.'],
+        'ecom_daily' => ['E-commerce daily sales and ad spend', 'Blinkit, Myntra, Hyugalife, Tata 1mg, Amazon and Flipkart: sales, orders, units, ad spend, ROAS.'],
     ];
 }
 

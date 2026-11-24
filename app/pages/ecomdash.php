@@ -44,7 +44,7 @@ $daysList = []; for ($d = min($mE, $today); $d >= $mS; $d = add_days($d, -1)) { 
 layout_head('E-commerce');
 ?>
 <div class="pagehead">
-  <div><h1>E-commerce</h1><p class="muted">Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon and Flipkart · sales and ad spend every day · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
+  <div><h1>E-commerce</h1><p class="muted">Blinkit, Myntra, Hyugalife, Tata 1mg, Amazon and Flipkart · sales and ad spend every day · <?= h(date('F Y', strtotime($month . '-01'))) ?></p></div>
   <div class="pagehead__r"><a class="btn btn--ghost" href="<?= h(url('exports')) ?>"><?= icon('download') ?>Download data</a></div>
 </div>
 <?php s_month_filter('ecomdash', $month); ?>

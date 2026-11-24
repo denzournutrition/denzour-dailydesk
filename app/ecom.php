@@ -1,7 +1,7 @@
 <?php
 defined('DD') or exit;
 
-/* E-commerce specialist: daily sales and ad spend for Blinkit, Myntra, HUGU Life and Tata 1mg. */
+/* E-commerce specialist: daily sales and ad spend for Blinkit, Myntra, Hyugalife and Tata 1mg. */
 
 const ECOM_DESIG = 'E-commerce Specialist';
 
@@ -9,7 +9,7 @@ const ECOM_DESIG = 'E-commerce Specialist';
 const ECOM_PLATFORMS = [
     'blinkit'  => ['Blinkit',   '#F8CB46', '#1d1d1d'],
     'myntra'   => ['Myntra',    '#FF3F6C', '#ffffff'],
-    'hugulife' => ['HUGU Life', '#6D4AC8', '#ffffff'],
+    'hugulife' => ['Hyugalife', '#6D4AC8', '#ffffff'],
     'tata1mg'  => ['Tata 1mg',  '#FF6F61', '#ffffff'],
     'amazon'   => ['Amazon',    '#FF9900', '#111111'],
     'flipkart' => ['Flipkart',  '#2874F0', '#ffffff'],
@@ -68,7 +68,7 @@ function ecom_logo(string $key, int $size = 40): string
     if (ecom_logo_path($key)) {
         return '<span class="plogo" style="--s:' . $size . 'px"><img src="' . h(url('ecomlogo', ['k' => $key, 'v' => (string)@filemtime((string)ecom_logo_path($key))])) . '" alt="' . h($p[0]) . '"></span>';
     }
-    $ini = $key === 'tata1mg' ? '1mg' : ($key === 'hugulife' ? 'HG' : mb_substr($p[0], 0, 1));
+    $ini = $key === 'tata1mg' ? '1mg' : ($key === 'hugulife' ? 'HL' : mb_substr($p[0], 0, 1));
     return '<span class="plogo plogo--b" style="--s:' . $size . 'px;background:' . $p[1] . ';color:' . $p[2] . '" role="img" aria-label="' . h($p[0]) . '">' . h($ini) . '</span>';
 }
 
@@ -77,7 +77,7 @@ function ecom_platform_key(string $text): string
     $t = strtolower($text);
     if (preg_match('/blinkit|grofers|blink it/', $t)) { return 'blinkit'; }
     if (preg_match('/myntra/', $t)) { return 'myntra'; }
-    if (preg_match('/hugu|hyugu|hyuga|hugh/', $t)) { return 'hugulife'; }
+    if (preg_match('/hugu|hyugu|hyuga|hugh|hyug|huyg/', $t)) { return 'hugulife'; }
     if (preg_match('/1\s*mg|tata/', $t)) { return 'tata1mg'; }
     if (preg_match('/amazon|amzn/', $t)) { return 'amazon'; }
     if (preg_match('/flipkart|flipcart|fk\b/', $t)) { return 'flipkart'; }

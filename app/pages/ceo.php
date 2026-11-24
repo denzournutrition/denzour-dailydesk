@@ -107,7 +107,7 @@ layout_head('Sales overview');
   <?php endforeach; ?>
     <tr style="background:var(--soft)"><td><strong>All online</strong></td><td class="r"><strong><?= h(inr($tot['online'])) ?></strong></td><td class="r"><strong><?= h(inr($tot['spend'])) ?></strong></td><td class="r">100%</td><td class="r"><strong><?= h(number_format($roas, 2)) ?>x</strong></td><td class="r hm">₹<?= h(number_format($spPct, 1)) ?></td><td class="r hm"><strong><?= h(inr($net)) ?></strong></td><td class="r hm"><?= h(inr_short($perDay)) ?></td></tr>
   </tbody></table></div>
-  <p class="muted tiny" style="margin-top:10px">ROAS = sales ÷ ad spend. Green is 3x or more, red is under 1.5x. Lines with no spend in the sheet are left out. Ritik's spend covers Blinkit, Myntra, HUGU Life and Tata 1mg together.</p>
+  <p class="muted tiny" style="margin-top:10px">ROAS = sales ÷ ad spend. Green is 3x or more, red is under 1.5x. Lines with no spend in the sheet are left out. Ritik's spend covers Blinkit, Myntra, Hyugalife and Tata 1mg together.</p>
 </section>
 <?php endif; ?>
 

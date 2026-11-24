@@ -3,7 +3,7 @@ defined('DD') or exit;
 
 $pdo = db();
 $self = url('gsync');
-$kinds = ['targets' => 'Targets and daily tracker (everyone)', 'sales' => 'Sales (orders and calls)', 'ecom' => 'E-commerce (Blinkit, Myntra, HUGU Life, Tata 1mg, Amazon, Flipkart)'];
+$kinds = ['targets' => 'Targets and daily tracker (everyone)', 'sales' => 'Sales (orders and calls)', 'ecom' => 'E-commerce (Blinkit, Myntra, Hyugalife, Tata 1mg, Amazon, Flipkart)'];
 $people = $pdo->query("SELECT id, name FROM users WHERE role = 'employee' AND active = 1 ORDER BY name")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

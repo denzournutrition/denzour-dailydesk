@@ -5,7 +5,7 @@ defined('DD') or exit;
    Expected sheet: a "Daily Tracker" tab (rows "Day 1".."Day 31", columns "<Name> Achieved" and "<Name> Daily Target")
    and an optional "Summary" tab (Name, Monthly Target, ...). People and platforms are both supported. */
 
-const TRACK_PLATFORMS = ['amazon', 'flipkart', 'shopify', 'myntra', 'blinkit', 'hugu life', 'hugu', 'tata 1mg', '1mg', 'website', 'offline', 'meesho', 'nykaa'];
+const TRACK_PLATFORMS = ['amazon', 'flipkart', 'shopify', 'myntra', 'blinkit', 'hyugalife', 'hyuga', 'hugu life', 'hugu', 'tata 1mg', '1mg', 'website', 'offline', 'meesho', 'nykaa'];
 
 function track_migrate(PDO $pdo): void
 {
@@ -555,7 +555,7 @@ function track_platform_owner(string $platform, array $ents): string
     $saved = track_parts()[$k] ?? null;
     if ($saved !== null) { return $saved === '-' ? '' : $saved; }
     if (!in_array($platform, ['blinkit', 'myntra', 'hugulife', 'tata1mg'], true)) { return ''; }
-    // Ritik runs Blinkit, Myntra, HUGU Life and Tata 1mg: by default his sheet line already contains them (change under "Already included in")
+    // Ritik runs Blinkit, Myntra, Hyugalife and Tata 1mg: by default his sheet line already contains them (change under "Already included in")
     foreach ($ents as $e) { if ($e['kind'] === 'person' && track_key($e['name']) === 'ritik' && $e['channel'] !== 'none' && $e['parent'] === '') { return 'ritik'; } }
     $st = db()->prepare("SELECT id FROM users WHERE active = 1 AND designation = ? ORDER BY id"); $st->execute([ECOM_DESIG]);
     $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));

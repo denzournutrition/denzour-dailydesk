@@ -129,7 +129,7 @@ function ceo_sales(string $from, string $to): array
         }
     }
     ceo_skip(substr($from, 0, 7) . '|u', $used);
-    // Platform-sheet rows that belong to a counted person (Ritik's Blinkit, Myntra, HUGU Life, Tata 1mg): shown, not added.
+    // Platform-sheet rows that belong to a counted person (Ritik's Blinkit, Myntra, Hyugalife, Tata 1mg): shown, not added.
     foreach ($rows as $i => $r) {
         if (empty($r['platform']) || !empty($r['src'])) { continue; }
         $own = track_platform_owner($r['platform'], $ents);
