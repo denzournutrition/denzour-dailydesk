@@ -37,7 +37,7 @@ function gsync_sheet_id(string $url): string
 function gsync_key(): string
 {
     $k = (string)cfg('install_key', 'dd');
-    return substr(hash_hmac('sha256', 'gsync', $k), 0, 24);
+    return substr(hash_hmac('sha256', 'gsync-cron-v2', $k), 0, 32); // v2: the first key was published by mistake, so it no longer works
 }
 
 function gsync_cron_url(): string

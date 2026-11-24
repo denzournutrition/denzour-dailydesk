@@ -1,5 +1,6 @@
 # Keeps the Google Sheet sync running when nobody has DailyDesk open.
-# Calls the site's sync address every 5 minutes (GitHub may delay a run by a few minutes).
+# Needs one repository secret named GSYNC_URL: the full "Keep it live" address shown on the Google Sheets page in DailyDesk.
+# Without that secret this job does nothing (the sync still runs whenever someone opens DailyDesk).
 name: DailyDesk sheet sync
 on:
   schedule:
@@ -11,4 +12,8 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Run due syncs
-        run: curl -s -m 60 -o /dev/null -w "HTTP %{http_code}\n" "https://reporting.denzuu.com/index.php?p=gsynccron&key=7acebdbd9522aaeca33beb7c"
+        env:
+          GSYNC_URL: ${{ secrets.GSYNC_URL }}
+        run: |
+          if [ -z "$GSYNC_URL" ]; then echo "No GSYNC_URL secret set. Skipping."; exit 0; fi
+          curl -s -m 60 -o /dev/null -w "HTTP %{http_code}\n" "$GSYNC_URL"
