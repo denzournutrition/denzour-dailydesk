@@ -198,7 +198,7 @@ function track_channel(string $name, string $kind): string
 {
     $c = track_classes();
     $k = track_key($name);
-    return $c[$k] ?? ($kind === 'platform' ? 'online' : 'none');
+    return $c[$k] ?? 'online'; // the main sheet's total counts everyone unless you mark a name Not counted
 }
 
 function track_saved_user(string $name): int
@@ -549,6 +549,8 @@ function track_platform_owner(string $platform, array $ents): string
     $saved = track_parts()[$k] ?? null;
     if ($saved !== null) { return $saved === '-' ? '' : $saved; }
     if (!in_array($platform, ['blinkit', 'myntra', 'hugulife', 'tata1mg'], true)) { return ''; }
+    // Ritik runs Blinkit, Myntra, HUGU Life and Tata 1mg: by default his sheet line already contains them (change under "Already included in")
+    foreach ($ents as $e) { if ($e['kind'] === 'person' && track_key($e['name']) === 'ritik' && $e['channel'] !== 'none' && $e['parent'] === '') { return 'ritik'; } }
     $st = db()->prepare("SELECT id FROM users WHERE active = 1 AND designation = ? ORDER BY id"); $st->execute([ECOM_DESIG]);
     $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     foreach ($ents as $e) { if ($e['kind'] === 'person' && in_array((int)$e['user_id'], $ids, true) && $e['channel'] !== 'none' && $e['parent'] === '') { return track_key($e['name']); } }
