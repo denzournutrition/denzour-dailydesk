@@ -10,6 +10,9 @@ $cur = ceo_sales($mS, $mE);
 $old = ceo_sales($pS, $pE);
 $tot = $cur['tot']; $otot = $old['tot'];
 $oldBy = []; foreach ($old['rows'] as $r) { $oldBy[$r['key']] = $r; }
+// The main sale sheet has no earlier months, so its figures are never compared with last month. Lines from a person's own sheet still are.
+$mainNow = (bool)array_filter($cur['rows'], fn($r) => !empty($r['src'])); $mainOld = (bool)array_filter($old['rows'], fn($r) => !empty($r['src']));
+$cmp = $mainNow === $mainOld;
 $view = ($_GET['view'] ?? 'day') === 'month' ? 'month' : 'day';
 $day = valid_date($_GET['d'] ?? '') ? min((string)$_GET['d'], $today) : $today;
 
@@ -60,9 +63,9 @@ layout_head('Sales overview');
 </div>
 
 <div class="kpis kpis--4">
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">All sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['all'])) ?> <?= $chg($tot['all'], $otot['all']) ?></strong><span class="kpi__s">vs <?= h(date('M', strtotime($prevMonth . '-01'))) ?> <?= h(inr_short($otot['all'])) ?> · <?= number_format($tot['orders']) ?> orders</span></div>
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Online</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['online'])) ?> <?= $chg($tot['online'], $otot['online']) ?></strong><span class="kpi__s"><?= $share($tot['online'], $tot['all']) ?>% of all sales</span></div>
-  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Offline</span><span class="kpi__ic kpi__ic--warn"><?= icon('users') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['offline'])) ?> <?= $chg($tot['offline'], $otot['offline']) ?></strong><span class="kpi__s"><?= $tot['offline'] > 0 ? $share($tot['offline'], $tot['all']) . '% of all sales' : 'No offline sales entered yet' ?></span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">All sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['all'])) ?> <?= $cmp ? $chg($tot['all'], $otot['all']) : '' ?></strong><span class="kpi__s"><?= $cmp ? 'vs ' . h(date('M', strtotime($prevMonth . '-01'))) . ' ' . h(inr_short($otot['all'])) : 'From the main sale sheet' ?> · <?= number_format($tot['orders']) ?> orders</span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Online</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['online'])) ?> <?= $cmp ? $chg($tot['online'], $otot['online']) : '' ?></strong><span class="kpi__s"><?= $share($tot['online'], $tot['all']) ?>% of all sales</span></div>
+  <div class="kpi"><div class="kpi__top"><span class="kpi__l">Offline</span><span class="kpi__ic kpi__ic--warn"><?= icon('users') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['offline'])) ?> <?= $cmp ? $chg($tot['offline'], $otot['offline']) : '' ?></strong><span class="kpi__s"><?= $tot['offline'] > 0 ? $share($tot['offline'], $tot['all']) . '% of all sales' : 'No offline sales entered yet' ?></span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= !empty($tot['sheet_spend']) ? 'Online ad spend' : 'Marketplace ad spend' ?></span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['spend'])) ?></strong><span class="kpi__s">ROAS <?= h(ecom_roas(!empty($tot['sheet_spend']) ? $tot['online'] : $tot['mp_sales'], $tot['spend'])) ?> on <?= !empty($tot['sheet_spend']) ? 'all online sales' : 'marketplaces' ?></span></div>
 </div>
 
@@ -71,9 +74,9 @@ layout_head('Sales overview');
   $elapsed = $month < substr($today, 0, 7) ? $dim : ($month > substr($today, 0, 7) ? 0 : (int)date('j', strtotime($today)));
   $elapsed = max(1, min($dim, $elapsed));
   $roas = $tot['online'] > 0 ? $tot['online'] / $tot['spend'] : 0.0;
-  $oroas = ($otot['spend'] ?? 0) > 0 ? $otot['online'] / $otot['spend'] : 0.0;
+  $oroas = $cmp && ($otot['spend'] ?? 0) > 0 ? $otot['online'] / $otot['spend'] : 0.0;
   $spPct = $tot['online'] > 0 ? $tot['spend'] / $tot['online'] * 100 : 0.0;
-  $oPct = ($otot['online'] ?? 0) > 0 && ($otot['spend'] ?? 0) > 0 ? $otot['spend'] / $otot['online'] * 100 : 0.0;
+  $oPct = $cmp && ($otot['online'] ?? 0) > 0 && ($otot['spend'] ?? 0) > 0 ? $otot['spend'] / $otot['online'] * 100 : 0.0;
   $net = $tot['online'] - $tot['spend'];
   $perDay = $tot['online'] / $elapsed; $spDay = $tot['spend'] / $elapsed;
   $projS = $perDay * $dim; $projSp = $spDay * $dim;
@@ -128,7 +131,7 @@ layout_head('Sales overview');
       <td class="r"><?= $inc ? '<span class="muted">–</span>' : $share($r['sales'], $sub) . '%' ?></td>
       <td class="r"><?= number_format($r['orders']) ?></td>
       <?php if ($kind === 'online'): ?><td class="r hm"><?= $r['spend'] > 0 ? h(inr($r['spend'])) : '–' ?></td><td class="r hm"><?= $r['spend'] > 0 ? h(ecom_roas((float)(isset($r['detail_spend']) ? $r['sales'] : ($r['detail'] ?? $r['sales'])), $r['spend'])) : '–' ?></td><?php endif; ?>
-      <td class="r"><?= $chg($r['sales'], (float)$o) ?: '–' ?></td>
+      <td class="r"><?= (empty($r['src']) && empty($oldBy[$r['key']]['src'])) ? ($chg($r['sales'], (float)$o) ?: '–') : '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>
     <?php if ($isSh): foreach ($r['subs'] as $sr): ?>
