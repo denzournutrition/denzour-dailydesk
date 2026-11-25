@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = $_FILES['csv'] ?? null;
         if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || ($f['size'] ?? 0) > 5000000) { flash('error', 'Choose the offline sales CSV file (up to 5 MB).'); }
         else {
-            try { $x = offline_import($f['tmp_name']); flash('ok', 'Offline sales imported: ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ', ' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . '.' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows without a number or date.' : '')); }
+            try { $x = offline_import($f['tmp_name'], (string)($_POST['stream'] ?? 'offline')); flash('ok', 'Invoices imported: ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ', ' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . '.' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows without a number or date.' : '')); }
             catch (Throwable $e) { flash('error', $e->getMessage()); }
         }
     } elseif ($act === 'delrow' && $isAdmin) {
@@ -77,6 +77,7 @@ layout_head('Website and offline sales');
   <h2>Offline sales: import invoices</h2>
   <p class="muted tiny">Upload the offline team's invoice CSV (No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance). Upload the latest file any time: invoices in the same dates are replaced, so nothing is counted twice. Daily totals go to the <strong>Offline</strong> channel. Bhanu's sheet line is separate and shows as <strong>Bhanu credit offline</strong>.</p>
   <form method="post" enctype="multipart/form-data" class="formrow"><?= $csrf ?><input type="hidden" name="action" value="offimport">
+    <label class="field"><span>For</span><select name="stream"><option value="offline">Offline (team)</option><option value="bhanu">Bhanu credit offline</option></select></label>
     <label class="field grow"><span>CSV file</span><input type="file" name="csv" accept=".csv,text/csv" required></label>
     <button class="btn" type="submit">Import</button></form>
   <?php if ($osel): $ot = array_sum(array_column($osel, 'sales')); ?>

@@ -34,6 +34,7 @@ $routes = [
     'exports'   => ['file' => 'exports',   'roles' => null, 'cap' => 'dashboard', 'auth' => true],
     'track'     => ['file' => 'track',     'roles' => null,                       'auth' => true],
     'ceo'       => ['file' => 'ceo',       'roles' => null, 'cap' => 'dashboard', 'auth' => true],
+    'offlinedash' => ['file' => 'offlinedash', 'roles' => null, 'cap' => 'dashboard', 'auth' => true],
     'channels'  => ['file' => 'channels',  'roles' => ['employee', 'admin'],      'auth' => true],
     'profile'   => ['file' => 'profile',   'roles' => null,                       'auth' => true],
     'team'      => ['file' => 'team',      'roles' => ['admin', 'ceo'],           'auth' => true],

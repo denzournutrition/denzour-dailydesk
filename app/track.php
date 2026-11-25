@@ -49,9 +49,15 @@ function track_migrate(PDO $pdo): void
 /** Display name for a sheet name (set once for Bhanu: "Bhanu credit offline"); the sheet itself is not changed. */
 function track_alias(string $name): string
 {
+    return track_alias_map()[track_key($name)] ?? $name;
+}
+
+/** name_key => the line name it is shown as (the designation). Several sheet names, over the months, can share one line name. */
+function track_alias_map(): array
+{
     static $a = null;
     if ($a === null) { $a = []; foreach (db()->query("SELECT k, v FROM settings WHERE k LIKE 'track_alias:%'") as $r) { $a[substr($r['k'], 12)] = $r['v']; } }
-    return $a[track_key($name)] ?? $name;
+    return $a;
 }
 
 function track_key(string $n): string
@@ -197,7 +203,10 @@ function track_user_for(string $name, ?array $users = null): int
 function track_classes(): array
 {
     static $c = null;
-    if ($c === null) { $c = []; foreach (db()->query('SELECT name_key, channel FROM track_cls') as $r) { $c[$r['name_key']] = $r['channel']; } }
+    if ($c === null) {
+        $c = []; foreach (db()->query('SELECT name_key, channel FROM track_cls') as $r) { $c[$r['name_key']] = $r['channel']; }
+        foreach (track_alias_map() as $nk => $label) { if (isset($c[$nk])) { $c[track_key($label)] = $c[$nk]; } } // the line name carries the same class
+    }
     return $c;
 }
 
@@ -538,7 +547,7 @@ function track_sales_between(string $from, string $to, bool $children = false): 
                 if ($x['a'] === null) { continue; }
                 $date = $m . '-' . str_pad((string)$day, 2, '0', STR_PAD_LEFT);
                 if ($date < $from || $date > $to) { continue; }
-                $k = track_key($e['name']);
+                $k = track_key(track_alias($e['name']));
                 $out[$k] ??= ['label' => track_alias($e['name']), 'kind' => $e['channel'] === 'none' ? 'online' : $e['channel'], 'sales' => 0.0, 'days' => [], 'parent' => $e['parent']];
                 $out[$k]['sales'] += (float)$x['a'];
                 $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$x['a'];

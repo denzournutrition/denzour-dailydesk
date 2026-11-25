@@ -32,6 +32,8 @@ function channels_migrate(PDO $pdo): void
         no TEXT PRIMARY KEY, day TEXT NOT NULL, customer TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', seller TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', total REAL NOT NULL DEFAULT 0, advance REAL NOT NULL DEFAULT 0, balance REAL NOT NULL DEFAULT 0
     )");
+    $oc = array_column($pdo->query('PRAGMA table_info(offline_orders)')->fetchAll(), 'name');
+    if (!in_array('stream', $oc, true)) { $pdo->exec("ALTER TABLE offline_orders ADD COLUMN stream TEXT NOT NULL DEFAULT 'offline'"); }
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_off_day ON offline_orders(day)');
     // One-time: the team's offline channel is simply called "Offline"; Bhanu's sheet line is "Bhanu credit offline" and counts as offline
     try {
@@ -49,64 +51,98 @@ function channels_migrate(PDO $pdo): void
     }
 }
 
-/** The "Offline" channel id (created if missing). */
-function offline_channel_id(): int
+const OFFLINE_STREAMS = ['offline' => 'Offline', 'bhanu' => 'Bhanu credit offline'];
+
+/** Channel id for an offline stream ('offline' = the offline team, 'bhanu' = Bhanu credit offline); created if missing. */
+function offline_channel_id(string $stream = 'offline'): int
 {
     $pdo = db();
-    $st = $pdo->prepare("SELECT id FROM sales_channels WHERE name = 'Offline' AND web = 0"); $st->execute();
+    $name = OFFLINE_STREAMS[$stream] ?? 'Offline';
+    $st = $pdo->prepare("SELECT id FROM sales_channels WHERE name = ? AND web = 0"); $st->execute([$name]);
     $id = (int)$st->fetchColumn();
-    if (!$id) { $pdo->prepare("INSERT INTO sales_channels (name, kind, web, active) VALUES ('Offline','offline',0,1)")->execute(); $id = (int)$pdo->lastInsertId(); }
+    if (!$id) { $pdo->prepare("INSERT INTO sales_channels (name, kind, web, active) VALUES (?, 'offline', 0, 1)")->execute([$name]); $id = (int)$pdo->lastInsertId(); }
     return $id;
 }
 
+/** "2026-11-24", "24/11/2026", "24-11-26", "24 Nov 2026" => "2026-11-24" or ''. */
+function offline_date(string $v): string
+{
+    $v = trim($v);
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $v, $m)) { return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? "$m[1]-$m[2]-$m[3]" : ''; }
+    foreach (['d/m/Y', 'd-m-Y', 'd/m/y', 'd-m-y', 'j M Y', 'j-M-Y', 'd.m.Y'] as $f) {
+        $d = DateTime::createFromFormat($f, $v);
+        if ($d && $d->format($f) === $v) { return $d->format('Y-m-d'); }
+    }
+    return '';
+}
+
 /**
- * Import the offline sales CSV (No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance).
- * Every invoice in the file's date range is replaced by the file, then the daily Offline totals are rebuilt from the invoices.
- * Returns ['rows','from','to','sales','skipped'].
+ * Import an invoice CSV for an offline stream. Columns are matched by name, so both the offline team's file
+ * (No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance) and a credit-sale file work.
+ * Invoices in the file's date range are replaced by the file, then the stream's daily totals are rebuilt.
  */
-function offline_import(string $path): array
+function offline_import(string $path, string $stream = 'offline'): array
 {
     $pdo = db();
+    $stream = isset(OFFLINE_STREAMS[$stream]) ? $stream : 'offline';
     $fh = fopen($path, 'r'); if (!$fh) { throw new RuntimeException('The file could not be opened.'); }
-    $hdr = null; $rows = []; $skipped = 0;
+    $syn = ['no' => ['no', 'invoice', 'invoiceno', 'invoicenumber', 'bill', 'billno', 'ref', 'refno'], 'date' => ['date', 'invoicedate', 'orderdate', 'saledate'],
+        'customer' => ['customer', 'party', 'partyname', 'customername', 'client', 'name', 'shop'], 'phone' => ['phone', 'mobile', 'contact', 'phoneno', 'mobileno'],
+        'seller' => ['seller', 'salesperson', 'executive', 'soldby', 'salesman'], 'status' => ['orderstatus', 'status'], 'note' => ['couriernote', 'note', 'notes', 'remarks', 'courier'],
+        'total' => ['total', 'amount', 'sale', 'saleamount', 'billamount', 'invoicevalue', 'invoiceamount', 'creditamount', 'totalamount'],
+        'advance' => ['advance', 'received', 'paid', 'collected', 'paidamount', 'receivedamount', 'advancereceived'],
+        'balance' => ['balance', 'due', 'outstanding', 'pending', 'balanceamount', 'dueamount', 'pendingamount']];
+    $hdr = null; $rows = []; $skipped = 0; $seq = 0;
     $num = fn($v) => round((float)str_replace([',', '₹', ' '], '', (string)$v), 2);
     while (($r = fgetcsv($fh, 0, ',', '"', '')) !== false) {
         if ($hdr === null) {
             $r[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string)($r[0] ?? ''));
-            $h = array_map(fn($c) => strtolower(preg_replace('/[^a-z]+/i', '', (string)$c)), $r);
-            if (in_array('date', $h, true) && in_array('total', $h, true)) { $hdr = array_flip($h); }
+            $names = array_map(fn($c) => strtolower(preg_replace('/[^a-z]+/i', '', (string)$c)), $r);
+            $m = [];
+            foreach ($syn as $f => $list) { foreach ($list as $alias) { $i = array_search($alias, $names, true); if ($i !== false && !in_array($i, $m, true)) { $m[$f] = $i; break; } } }
+            if (isset($m['date'], $m['total'])) { $hdr = $m; }
             continue;
         }
         $g = fn($k) => isset($hdr[$k], $r[$hdr[$k]]) ? trim((string)$r[$hdr[$k]]) : '';
-        $day = $g('date'); $no = $g('no');
-        if ($no === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) { $skipped++; continue; }
-        $tot = $num($g('total')); $adv = $num($g('advance'));
-        $rows[$no] = [$no, $day, mb_substr($g('customer'), 0, 120), preg_replace('/[^0-9+]/', '', $g('phone')), mb_substr($g('seller'), 0, 60), mb_substr($g('orderstatus'), 0, 40),
-            mb_substr($g('couriernote'), 0, 120), $tot, min($adv, $tot), max(0.0, round($tot - $adv, 2))];
+        $day = offline_date($g('date')); $tot = $num($g('total'));
+        if ($day === '' || $tot <= 0) { $skipped++; continue; }
+        $adv = isset($hdr['advance']) ? $num($g('advance')) : (isset($hdr['balance']) ? max(0.0, $tot - $num($g('balance'))) : 0.0);
+        $adv = min($adv, $tot);
+        $no = $g('no'); if ($no === '') { $no = 'AUTO-' . substr(md5($day . '|' . $g('customer') . '|' . $tot . '|' . (++$seq)), 0, 8); }
+        $key = ($stream === 'bhanu' ? 'B:' : '') . mb_substr($no, 0, 40);
+        $rows[$key] = [$key, $day, mb_substr($g('customer'), 0, 120), preg_replace('/[^0-9+]/', '', $g('phone')), mb_substr($g('seller'), 0, 60), mb_substr($g('status'), 0, 40),
+            mb_substr($g('note'), 0, 120), $tot, $adv, max(0.0, round($tot - $adv, 2)), $stream];
     }
     fclose($fh);
-    if ($hdr === null) { throw new RuntimeException('This does not look like the offline sales file. The columns should be No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance.'); }
+    if ($hdr === null) { throw new RuntimeException('This does not look like an invoice file. It needs at least a Date column and a Total (or Amount) column.'); }
     if (!$rows) { throw new RuntimeException('No invoices were found in the file.'); }
     $days = array_column($rows, 1); $from = min($days); $to = max($days);
-    $cid = offline_channel_id();
+    $cid = offline_channel_id($stream);
     $pdo->beginTransaction();
     try {
-        $pdo->prepare('DELETE FROM offline_orders WHERE day BETWEEN ? AND ?')->execute([$from, $to]);
-        $ins = $pdo->prepare('INSERT OR REPLACE INTO offline_orders (no, day, customer, phone, seller, status, note, total, advance, balance) VALUES (?,?,?,?,?,?,?,?,?,?)');
+        $pdo->prepare('DELETE FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ?')->execute([$stream, $from, $to]);
+        $ins = $pdo->prepare('INSERT OR REPLACE INTO offline_orders (no, day, customer, phone, seller, status, note, total, advance, balance, stream) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($rows as $r) { $ins->execute($r); }
         $pdo->prepare('DELETE FROM channel_daily WHERE channel_id = ? AND day BETWEEN ? AND ?')->execute([$cid, $from, $to]);
-        $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) SELECT ?, day, ROUND(SUM(total),2), COUNT(*), 0, 'Imported invoices', ? FROM offline_orders WHERE day BETWEEN ? AND ? GROUP BY day")
-            ->execute([$cid, date('Y-m-d H:i:s'), $from, $to]);
+        $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) SELECT ?, day, ROUND(SUM(total),2), COUNT(*), 0, 'Imported invoices', ? FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ? GROUP BY day")
+            ->execute([$cid, date('Y-m-d H:i:s'), $stream, $from, $to]);
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
     return ['rows' => count($rows), 'from' => $from, 'to' => $to, 'sales' => array_sum(array_column($rows, 7)), 'skipped' => $skipped];
 }
 
-/** Offline invoices by seller between two dates: [['seller','orders','sales','advance','balance']] biggest first. */
-function offline_by_seller(string $from, string $to): array
+/** All invoices of a stream between two dates. */
+function offline_orders_between(string $from, string $to, string $stream = 'offline'): array
 {
-    $st = db()->prepare("SELECT seller, COUNT(*) orders, SUM(total) sales, SUM(advance) advance, SUM(balance) balance FROM offline_orders WHERE day BETWEEN ? AND ? GROUP BY seller ORDER BY sales DESC");
-    $st->execute([$from, $to]);
+    $st = db()->prepare('SELECT * FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ? ORDER BY day DESC, no DESC'); $st->execute([$stream, $from, $to]);
+    return $st->fetchAll();
+}
+
+/** Offline invoices by seller between two dates: [['seller','orders','sales','advance','balance']] biggest first. */
+function offline_by_seller(string $from, string $to, string $stream = 'offline'): array
+{
+    $st = db()->prepare("SELECT seller, COUNT(*) orders, SUM(total) sales, SUM(advance) advance, SUM(balance) balance FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ? GROUP BY seller ORDER BY sales DESC");
+    $st->execute([$stream, $from, $to]);
     return $st->fetchAll();
 }
 
@@ -184,11 +220,13 @@ function ceo_sales(string $from, string $to): array
         foreach (track_load($mm)['ents'] as $e) {
             $sp = (float)($e['spend'] ?? 0);
             if ($sp > 0) { $sheetSpend = true; }
-            $spendBy[track_key($e['name'])] = ($spendBy[track_key($e['name'])] ?? 0.0) + $sp * $frac;
+            $ak = track_key(track_alias($e['name'])); $spendBy[$ak] = ($spendBy[$ak] ?? 0.0) + $sp * $frac;
         }
     }
     foreach (track_sales_between($from, $to) as $tk => $t) {
         if ($t['sales'] <= 0) { continue; }
+        // A line fed by uploaded invoices (e.g. Bhanu credit offline) replaces its sheet figure, so it is never counted twice
+        foreach ($rows as $r0) { if (($r0['group'] ?? '') === 'Offline' && str_starts_with((string)$r0['key'], 'c:') && track_key($r0['label']) === $tk && $r0['sales'] > 0) { continue 2; } }
         $hit = null;
         foreach ($rows as $i => $r) {
             $rk = track_key($r['label']);

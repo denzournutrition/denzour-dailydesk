@@ -14,6 +14,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array)($_POST['map'] ?? []) as $key => $uid) { $up->execute([track_key((string)$key), (int)$uid]); }
         $uc = $pdo->prepare('INSERT INTO track_cls (name_key, channel) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET channel = excluded.channel');
         foreach ((array)($_POST['cls'] ?? []) as $key => $ch) { $uc->execute([track_key((string)$key), in_array($ch, ['online', 'offline'], true) ? $ch : 'none']); }
+        foreach ((array)($_POST['alias'] ?? []) as $key => $al) {
+            $key = track_key((string)$key); $al = mb_substr(trim((string)$al), 0, 40);
+            if ($al === '') { $pdo->prepare('DELETE FROM settings WHERE k = ?')->execute(['track_alias:' . $key]); }
+            else { $pdo->prepare('INSERT OR REPLACE INTO settings (k, v) VALUES (?,?)')->execute(['track_alias:' . $key, $al]); }
+        }
         $us = $pdo->prepare('INSERT INTO track_src (name_key, src) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET src = excluded.src');
         foreach ((array)($_POST['src'] ?? []) as $key => $sv) { $us->execute([track_key((string)$key), in_array($sv, ['auto', 'manual'], true) ? $sv : 'sheet']); }
         $up2 = $pdo->prepare('INSERT INTO track_part (name_key, parent_key) VALUES (?,?) ON CONFLICT(name_key) DO UPDATE SET parent_key = excluded.parent_key');
@@ -112,17 +117,18 @@ layout_head('Targets');
     <summary><strong>Name settings</strong> <span class="muted tiny">link people to employees and choose Online or Offline for the Sales overview</span></summary>
     <form method="post" action="<?= h(url('track', ['month' => $month])) ?>" style="margin-top:14px">
       <?= csrf_field() ?><input type="hidden" name="action" value="map"><input type="hidden" name="month" value="<?= h($month) ?>">
-      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Assigned to employee (they see this target)</th><th>Show sales on Sales overview as</th><th>Daily figures come from</th><th>Already included in</th></tr></thead><tbody>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Name in the sheet</th><th>Assigned to employee (they see this target)</th><th>Show sales on Sales overview as</th><th>Line name <span class="muted tiny">(the designation)</span></th><th>Daily figures come from</th><th>Already included in</th></tr></thead><tbody>
       <?php foreach ($d['ents'] as $e): $k = track_key($e['name']); ?>
         <tr><td><strong><?= h($e['name']) ?></strong> <span class="muted tiny"><?= $e['kind'] === 'person' ? 'person' : 'platform' ?></span></td>
           <td><select name="map[<?= h($k) ?>]"><option value="0"><?= $e['kind'] === 'person' ? 'Not linked' : 'Nobody' ?></option>
             <?php foreach ($people as $pp): ?><option value="<?= (int)$pp['id'] ?>" <?= $e['user_id'] === (int)$pp['id'] ? 'selected' : '' ?>><?= h($pp['name']) ?></option><?php endforeach; ?></select></td>
           <td><select name="cls[<?= h($k) ?>]"><?php foreach (['online' => 'Online', 'offline' => 'Offline', 'none' => 'Not counted'] as $cv => $cl): ?><option value="<?= h($cv) ?>" <?= $e['channel'] === $cv ? 'selected' : '' ?>><?= h($cl) ?></option><?php endforeach; ?></select></td>
+          <td><input name="alias[<?= h($k) ?>]" maxlength="40" value="<?= h(track_alias_map()[$k] ?? '') ?>" placeholder="<?= h($e['name']) ?>" style="width:150px"></td>
           <td><select name="src[<?= h($k) ?>]"><?php foreach (['sheet' => 'Google Sheet', 'auto' => 'Automatic (DailyDesk data)', 'manual' => 'Employee types them'] as $sv => $sl): ?><option value="<?= h($sv) ?>" <?= $e['src'] === $sv ? 'selected' : '' ?>><?= h($sl) ?></option><?php endforeach; ?></select></td>
           <td><select name="part[<?= h($k) ?>]"><option value="">Nothing (counted on its own)</option><?php foreach ($d['ents'] as $o): if ($o['name'] === $e['name']) { continue; } ?><option value="<?= h(track_key($o['name'])) ?>" <?= $e['parent'] === $o['name'] ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></td></tr>
       <?php endforeach; ?>
       <?php foreach (['blinkit', 'myntra', 'hugulife', 'tata1mg'] as $pkey): $own = track_platform_owner($pkey, $d['ents']); $saved = track_parts()['p:' . $pkey] ?? null; ?>
-        <tr><td><strong><?= h(ECOM_PLATFORMS[$pkey][0]) ?></strong> <span class="muted tiny">platform sheet</span></td><td class="muted tiny" colspan="3">Platform-wise sales and spend from the e-commerce sheet</td>
+        <tr><td><strong><?= h(ECOM_PLATFORMS[$pkey][0]) ?></strong> <span class="muted tiny">platform sheet</span></td><td class="muted tiny" colspan="4">Platform-wise sales and spend from the e-commerce sheet</td>
           <td><select name="part[p:<?= h($pkey) ?>]"><option value="-" <?= $saved === '-' ? 'selected' : '' ?>>Nothing (counted on its own)</option><?php foreach ($d['ents'] as $o): if ($o['kind'] !== 'person') { continue; } ?><option value="<?= h(track_key($o['name'])) ?>" <?= $own === track_key($o['name']) ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></td></tr>
       <?php endforeach; ?>
       </tbody></table></div>

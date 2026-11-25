@@ -403,6 +403,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $boards[] = ['dashboard', 'Team dashboard', 'grid'];
             $boards[] = ['salesdash', 'Inside Sales', 'trend'];
             $boards[] = ['ecomdash', 'E-commerce', 'bag'];
+            $boards[] = ['offlinedash', 'Offline', 'users'];
             $boards[] = ['ads', 'Ads and creatives', 'trend'];
             $boards[] = ['social', 'Instagram', 'users'];
             $boards[] = ['attboard', 'Attendance', 'check'];
