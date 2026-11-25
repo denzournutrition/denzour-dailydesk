@@ -46,6 +46,14 @@ function track_migrate(PDO $pdo): void
     } catch (Throwable $e) { /* never block start-up */ }
 }
 
+/** Display name for a sheet name (set once for Bhanu: "Bhanu credit offline"); the sheet itself is not changed. */
+function track_alias(string $name): string
+{
+    static $a = null;
+    if ($a === null) { $a = []; foreach (db()->query("SELECT k, v FROM settings WHERE k LIKE 'track_alias:%'") as $r) { $a[substr($r['k'], 12)] = $r['v']; } }
+    return $a[track_key($name)] ?? $name;
+}
+
 function track_key(string $n): string
 {
     return strtolower(preg_replace('/[^a-z0-9]+/i', '', $n));
@@ -531,7 +539,7 @@ function track_sales_between(string $from, string $to, bool $children = false): 
                 $date = $m . '-' . str_pad((string)$day, 2, '0', STR_PAD_LEFT);
                 if ($date < $from || $date > $to) { continue; }
                 $k = track_key($e['name']);
-                $out[$k] ??= ['label' => $e['name'], 'kind' => $e['channel'] === 'none' ? 'online' : $e['channel'], 'sales' => 0.0, 'days' => [], 'parent' => $e['parent']];
+                $out[$k] ??= ['label' => track_alias($e['name']), 'kind' => $e['channel'] === 'none' ? 'online' : $e['channel'], 'sales' => 0.0, 'days' => [], 'parent' => $e['parent']];
                 $out[$k]['sales'] += (float)$x['a'];
                 $out[$k]['days'][$date] = ($out[$k]['days'][$date] ?? 0.0) + (float)$x['a'];
             }

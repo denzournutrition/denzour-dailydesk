@@ -24,6 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$cid, $day, $sales, $orders, (int)$me['id'], mb_substr(trim((string)($_POST['note'] ?? '')), 0, 120), date('Y-m-d H:i:s'), $meta, $infl]);
             flash('ok', 'Saved ' . inr($sales) . ' for ' . fmt_date($day) . '.');
         }
+    } elseif ($act === 'offimport') {
+        $f = $_FILES['csv'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || ($f['size'] ?? 0) > 5000000) { flash('error', 'Choose the offline sales CSV file (up to 5 MB).'); }
+        else {
+            try { $x = offline_import($f['tmp_name']); flash('ok', 'Offline sales imported: ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ', ' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . '.' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows without a number or date.' : '')); }
+            catch (Throwable $e) { flash('error', $e->getMessage()); }
+        }
     } elseif ($act === 'delrow' && $isAdmin) {
         $pdo->prepare('DELETE FROM channel_daily WHERE channel_id = ? AND day = ?')->execute([(int)($_POST['channel'] ?? 0), (string)($_POST['day'] ?? '')]);
         flash('ok', 'Entry removed.');
@@ -63,6 +70,24 @@ layout_head('Website and offline sales');
     <button class="btn" type="submit">Save</button>
   </form>
   <p class="muted tiny" style="margin-top:10px">Saving the same channel and date again replaces the earlier number. For Shopify, enter the full website total for the day. The CEO page splits it into Meta ads, influencer codes, Inside Sales (taken from the sales sheets) and others (the rest).</p>
+</section>
+
+<?php $om = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['month'] ?? '')) ? $_GET['month'] : substr($today, 0, 7); $osel = offline_by_seller($om . '-01', $om . '-31'); $ost = $pdo->prepare("SELECT status, COUNT(*) n, SUM(total) t, SUM(balance) b FROM offline_orders WHERE day BETWEEN ? AND ? GROUP BY status ORDER BY t DESC"); $ost->execute([$om . '-01', $om . '-31']); $ost = $ost->fetchAll(); ?>
+<section class="card card--wide">
+  <h2>Offline sales: import invoices</h2>
+  <p class="muted tiny">Upload the offline team's invoice CSV (No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance). Upload the latest file any time: invoices in the same dates are replaced, so nothing is counted twice. Daily totals go to the <strong>Offline</strong> channel. Bhanu's sheet line is separate and shows as <strong>Bhanu credit offline</strong>.</p>
+  <form method="post" enctype="multipart/form-data" class="formrow"><?= $csrf ?><input type="hidden" name="action" value="offimport">
+    <label class="field grow"><span>CSV file</span><input type="file" name="csv" accept=".csv,text/csv" required></label>
+    <button class="btn" type="submit">Import</button></form>
+  <?php if ($osel): $ot = array_sum(array_column($osel, 'sales')); ?>
+  <form method="get" class="formrow" style="margin-top:12px"><input type="hidden" name="p" value="channels"><label class="field"><span>Month</span><input type="month" name="month" value="<?= h($om) ?>" onchange="this.form.submit()"></label></form>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Seller</th><th class="r">Invoices</th><th class="r">Sales</th><th class="r">Advance received</th><th class="r">Balance due</th></tr></thead><tbody>
+  <?php foreach ($osel as $o): ?><tr><td><strong><?= h($o['seller'] ?: 'No seller') ?></strong></td><td class="r"><?= (int)$o['orders'] ?></td><td class="r"><?= h(inr((float)$o['sales'])) ?></td><td class="r"><?= h(inr((float)$o['advance'])) ?></td><td class="r"><?= h(inr((float)$o['balance'])) ?></td></tr><?php endforeach; ?>
+  <tr><td><strong>Total</strong></td><td class="r"><strong><?= array_sum(array_column($osel, 'orders')) ?></strong></td><td class="r"><strong><?= h(inr($ot)) ?></strong></td><td class="r"><strong><?= h(inr(array_sum(array_column($osel, 'advance')))) ?></strong></td><td class="r"><strong><?= h(inr(array_sum(array_column($osel, 'balance')))) ?></strong></td></tr>
+  </tbody></table></div>
+  <div class="tblwrap" style="margin-top:12px"><table class="tbl"><thead><tr><th>Order status</th><th class="r">Invoices</th><th class="r">Sales</th><th class="r">Balance due</th></tr></thead><tbody>
+  <?php foreach ($ost as $o): ?><tr><td><?= h($o['status'] ?: '–') ?></td><td class="r"><?= (int)$o['n'] ?></td><td class="r"><?= h(inr((float)$o['t'])) ?></td><td class="r"><?= h(inr((float)$o['b'])) ?></td></tr><?php endforeach; ?></tbody></table></div>
+  <?php endif; ?>
 </section>
 
 <?php if ($isAdmin): ?>

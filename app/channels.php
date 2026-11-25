@@ -28,11 +28,86 @@ function channels_migrate(PDO $pdo): void
     }
     $pdo->exec("UPDATE sales_channels SET name = 'Shopify (website)' WHERE web = 1 AND name LIKE 'Website%'");
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_chd_day ON channel_daily(day)');
+    $pdo->exec("CREATE TABLE IF NOT EXISTS offline_orders (
+        no TEXT PRIMARY KEY, day TEXT NOT NULL, customer TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', seller TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', total REAL NOT NULL DEFAULT 0, advance REAL NOT NULL DEFAULT 0, balance REAL NOT NULL DEFAULT 0
+    )");
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_off_day ON offline_orders(day)');
+    // One-time: the team's offline channel is simply called "Offline"; Bhanu's sheet line is "Bhanu credit offline" and counts as offline
+    try {
+        $pdo->exec("UPDATE sales_channels SET name = 'Offline' WHERE name = 'Offline: gyms and supplement stores' AND NOT EXISTS (SELECT 1 FROM sales_channels WHERE name = 'Offline')");
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_bhanu_offline'")->fetchColumn()) {
+            $pdo->exec("INSERT OR REPLACE INTO track_cls (name_key, channel) VALUES ('bhanuverma', 'offline')");
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('track_alias:bhanuverma', 'Bhanu credit offline')");
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_bhanu_offline', '1')");
+        }
+    } catch (Throwable $e) { /* never block start-up */ }
     if ((int)$pdo->query('SELECT COUNT(*) FROM sales_channels')->fetchColumn() === 0) {
         $ins = $pdo->prepare('INSERT INTO sales_channels (name, kind, web) VALUES (?,?,?)');
         $ins->execute(['Shopify (website)', 'online', 1]);
-        $ins->execute(['Offline: gyms and supplement stores', 'offline', 0]);
+        $ins->execute(['Offline', 'offline', 0]);
     }
+}
+
+/** The "Offline" channel id (created if missing). */
+function offline_channel_id(): int
+{
+    $pdo = db();
+    $st = $pdo->prepare("SELECT id FROM sales_channels WHERE name = 'Offline' AND web = 0"); $st->execute();
+    $id = (int)$st->fetchColumn();
+    if (!$id) { $pdo->prepare("INSERT INTO sales_channels (name, kind, web, active) VALUES ('Offline','offline',0,1)")->execute(); $id = (int)$pdo->lastInsertId(); }
+    return $id;
+}
+
+/**
+ * Import the offline sales CSV (No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance).
+ * Every invoice in the file's date range is replaced by the file, then the daily Offline totals are rebuilt from the invoices.
+ * Returns ['rows','from','to','sales','skipped'].
+ */
+function offline_import(string $path): array
+{
+    $pdo = db();
+    $fh = fopen($path, 'r'); if (!$fh) { throw new RuntimeException('The file could not be opened.'); }
+    $hdr = null; $rows = []; $skipped = 0;
+    $num = fn($v) => round((float)str_replace([',', '₹', ' '], '', (string)$v), 2);
+    while (($r = fgetcsv($fh, 0, ',', '"', '')) !== false) {
+        if ($hdr === null) {
+            $r[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string)($r[0] ?? ''));
+            $h = array_map(fn($c) => strtolower(preg_replace('/[^a-z]+/i', '', (string)$c)), $r);
+            if (in_array('date', $h, true) && in_array('total', $h, true)) { $hdr = array_flip($h); }
+            continue;
+        }
+        $g = fn($k) => isset($hdr[$k], $r[$hdr[$k]]) ? trim((string)$r[$hdr[$k]]) : '';
+        $day = $g('date'); $no = $g('no');
+        if ($no === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) { $skipped++; continue; }
+        $tot = $num($g('total')); $adv = $num($g('advance'));
+        $rows[$no] = [$no, $day, mb_substr($g('customer'), 0, 120), preg_replace('/[^0-9+]/', '', $g('phone')), mb_substr($g('seller'), 0, 60), mb_substr($g('orderstatus'), 0, 40),
+            mb_substr($g('couriernote'), 0, 120), $tot, min($adv, $tot), max(0.0, round($tot - $adv, 2))];
+    }
+    fclose($fh);
+    if ($hdr === null) { throw new RuntimeException('This does not look like the offline sales file. The columns should be No, Date, Customer, Phone, Seller, Order Status, Courier / Note, Total, Advance, Balance.'); }
+    if (!$rows) { throw new RuntimeException('No invoices were found in the file.'); }
+    $days = array_column($rows, 1); $from = min($days); $to = max($days);
+    $cid = offline_channel_id();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('DELETE FROM offline_orders WHERE day BETWEEN ? AND ?')->execute([$from, $to]);
+        $ins = $pdo->prepare('INSERT OR REPLACE INTO offline_orders (no, day, customer, phone, seller, status, note, total, advance, balance) VALUES (?,?,?,?,?,?,?,?,?,?)');
+        foreach ($rows as $r) { $ins->execute($r); }
+        $pdo->prepare('DELETE FROM channel_daily WHERE channel_id = ? AND day BETWEEN ? AND ?')->execute([$cid, $from, $to]);
+        $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) SELECT ?, day, ROUND(SUM(total),2), COUNT(*), 0, 'Imported invoices', ? FROM offline_orders WHERE day BETWEEN ? AND ? GROUP BY day")
+            ->execute([$cid, date('Y-m-d H:i:s'), $from, $to]);
+        $pdo->commit();
+    } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    return ['rows' => count($rows), 'from' => $from, 'to' => $to, 'sales' => array_sum(array_column($rows, 7)), 'skipped' => $skipped];
+}
+
+/** Offline invoices by seller between two dates: [['seller','orders','sales','advance','balance']] biggest first. */
+function offline_by_seller(string $from, string $to): array
+{
+    $st = db()->prepare("SELECT seller, COUNT(*) orders, SUM(total) sales, SUM(advance) advance, SUM(balance) balance FROM offline_orders WHERE day BETWEEN ? AND ? GROUP BY seller ORDER BY sales DESC");
+    $st->execute([$from, $to]);
+    return $st->fetchAll();
 }
 
 function channels_all(bool $onlyActive = true): array
@@ -71,8 +146,14 @@ function ceo_sales(string $from, string $to): array
             if ($r['last'] && ($web['last'] === null || $r['last'] > $web['last'])) { $web['last'] = $r['last']; }
             continue;
         }
-        $rows[] = ['key' => 'c:' . $r['id'], 'label' => $r['name'], 'group' => $r['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $r['kind'], 'sales' => (float)$r['s'], 'orders' => (int)$r['o'],
+        $row = ['key' => 'c:' . $r['id'], 'label' => $r['name'], 'group' => $r['kind'] === 'online' ? 'Other online' : 'Offline', 'kind' => $r['kind'], 'sales' => (float)$r['s'], 'orders' => (int)$r['o'],
             'spend' => 0.0, 'days' => (int)$r['n'], 'last' => $r['last'], 'platform' => ''];
+        if ($r['name'] === 'Offline') {
+            $subs = [];
+            foreach (offline_by_seller($from, $to) as $sl) { $subs[] = ['key' => 'sub:off:' . track_key($sl['seller']), 'label' => $sl['seller'] ?: 'No seller', 'sales' => (float)$sl['sales'], 'orders' => (int)$sl['orders']]; }
+            if ($subs) { $row['subs'] = $subs; }
+        }
+        $rows[] = $row;
     }
     $in = $q('SELECT SUM(amount) s, COUNT(*) o, MAX(order_date) last FROM sales_orders WHERE order_date BETWEEN ? AND ?', [$from, $to])[0];
     $names = array_column($q('SELECT DISTINCT u.name FROM sales_orders o JOIN users u ON u.id = o.user_id WHERE o.order_date BETWEEN ? AND ? ORDER BY u.name', [$from, $to]), 'name');

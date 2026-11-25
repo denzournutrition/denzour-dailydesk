@@ -159,11 +159,11 @@ layout_head('Sales overview');
       <td class="r"><?= (empty($r['src']) === empty($oldBy[$r['key']]['src'])) ? ($chg($r['sales'], (float)$o) ?: '–') : '–' ?></td>
       <td class="r hm <?= $r['last'] ? '' : 'is-low' ?>"><?= $r['last'] ? h(fmt_date($r['last'])) : 'No data' ?></td>
     </tr>
-    <?php if ($isSh): foreach ($r['subs'] as $sr): ?>
+    <?php if (!empty($r['subs'])): foreach ($r['subs'] as $sr): ?>
     <tr>
       <td style="padding-left:34px"><span class="muted">↳</span> <?= h($sr['label']) ?></td>
       <td class="r"><?= $sr['sales'] > 0 ? h(inr($sr['sales'])) : '<span class="muted">–</span>' ?></td>
-      <td class="r muted"><?= $r['sales'] > 0 && $sr['sales'] > 0 ? $share($sr['sales'], $r['sales']) . '% of Shopify' : '–' ?></td>
+      <td class="r muted"><?= $r['sales'] > 0 && $sr['sales'] > 0 ? $share($sr['sales'], $r['sales']) . '% of ' . h($r['label']) : '–' ?></td>
       <td class="r"><?= $sr['orders'] !== null ? number_format($sr['orders']) : '–' ?></td>
       <?php if ($kind === 'online'): ?><td class="r hm">–</td><td class="r hm">–</td><?php endif; ?>
       <td class="r">–</td><td class="r hm">–</td>
