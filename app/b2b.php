@@ -182,8 +182,11 @@ function b2b_import(string $path): string
         $n = $cell($r, 0); if ($i === 0 || $n === '') { continue; }
         $rem = $cell($r, 3); $leads[] = ['calling', $n, $cell($r, 1), $phoneOf([$cell($r, 2)]), '', '', $rem, b2b_lead_status($rem)];
     }
+    $callMode = false;
     foreach ($find('new prospect') as $i => $r) {
         $n = $cell($r, 0); if ($i === 0 || $n === '') { continue; }
+        if (preg_match('/^firm\s*name$/i', $n)) { $callMode = true; continue; }   // the calling list sits lower in the same tab, under its own header
+        if ($callMode) { $rem = $cell($r, 3); $leads[] = ['calling', $n, $cell($r, 1), $phoneOf([$cell($r, 2)]), '', '', $rem, b2b_lead_status($rem)]; continue; }
         $ph = $phoneOf([$cell($r, 2), $cell($r, 1), $cell($r, 3)]); $area = $isText($cell($r, 1)) ? $cell($r, 1) : '';
         $d3 = $cell($r, 3); $addr = mb_strlen($d3) > 40 ? $d3 : ''; $rem = $cell($r, 5);
         if ($addr === '' && $isText($d3)) {   // a short text in column D is either a remark ("invalid contact number") or the city ("Delhi")
