@@ -14,6 +14,7 @@ require __DIR__ . '/routine.php';
 require __DIR__ . '/conn.php';
 require __DIR__ . '/profile.php';
 require __DIR__ . '/channels.php';
+require __DIR__ . '/b2b.php';
 
 function cfg(string $k, $d = null)
 {
@@ -141,6 +142,7 @@ function migrate(PDO $pdo): void
     conn_migrate($pdo);
     profile_migrate($pdo);
     channels_migrate($pdo);
+    b2b_migrate($pdo);
     att_migrate($pdo);
 }
 
