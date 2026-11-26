@@ -12,6 +12,8 @@ function b2b_migrate(PDO $pdo): void
         last_contact TEXT NOT NULL DEFAULT '', first_contact TEXT NOT NULL DEFAULT '', remark TEXT NOT NULL DEFAULT '')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS b2b_order (month TEXT NOT NULL, k TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS b2b_coll (day TEXT NOT NULL, k TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0, raw TEXT NOT NULL DEFAULT '')");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS b2b_lead (src TEXT NOT NULL, name TEXT NOT NULL, area TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '',
+        contact TEXT NOT NULL DEFAULT '', remark TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS b2b_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL DEFAULT '')");
     try {
         if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_b2b_sheet'")->fetchColumn()) {
@@ -172,19 +174,43 @@ function b2b_import(string $path): string
         }
         if ($gtxt !== '') { $addColl($amt($f), $gtxt, $sec); }
     }
-    // 6. pipeline counts
-    $cnt = function (string $needle, int $col, int $skip) use ($find, $cell) { $n = 0; foreach ($find($needle) as $i => $r) { if ($i >= $skip && $cell($r, $col) !== '') { $n++; } } return $n; };
-    $meta = ['prospects' => $cnt('new prospect', 0, 1), 'newdata' => $cnt('new data', 0, 1), 'samples' => $cnt('samples', 0, 1), 'leads' => $cnt('denzu lead', 0, 2)];
-    $interested = 0; foreach ($find('new data') as $i => $r) { if ($i > 0 && preg_match('/good prospect|ready to dispatch|send samples/i', $cell($r, 3))) { $interested++; } }
-    $meta['hot'] = $interested;
+    // 6. pipeline: calling list (New Data), new prospects, Denzuu leads, samples, each row with its remark and call status
+    $leads = [];
+    $phoneOf = function (array $cells) { foreach ($cells as $c) { $d = preg_replace('/\D+/', '', (string)$c); if (strlen($d) >= 10 && strlen($d) <= 13) { return substr($d, -10); } } return ''; };
+    $isText = fn($v) => $v !== '' && !preg_match('/^[\d\s\-+.,]+$/', $v) && $v !== '—';
+    foreach ($find('new data') as $i => $r) {
+        $n = $cell($r, 0); if ($i === 0 || $n === '') { continue; }
+        $rem = $cell($r, 3); $leads[] = ['calling', $n, $cell($r, 1), $phoneOf([$cell($r, 2)]), '', '', $rem, b2b_lead_status($rem)];
+    }
+    foreach ($find('new prospect') as $i => $r) {
+        $n = $cell($r, 0); if ($i === 0 || $n === '') { continue; }
+        $ph = $phoneOf([$cell($r, 2), $cell($r, 1), $cell($r, 3)]); $area = $isText($cell($r, 1)) ? $cell($r, 1) : '';
+        $d3 = $cell($r, 3); $addr = mb_strlen($d3) > 40 ? $d3 : ''; $rem = $cell($r, 5);
+        if ($addr === '' && $isText($d3)) {   // a short text in column D is either a remark ("invalid contact number") or the city ("Delhi")
+            if (b2b_lead_status($d3) !== 'Other') { if ($rem === '') { $rem = $d3; } } elseif ($area === '') { $area = $d3; }
+        }
+        $leads[] = ['prospect', $n, $area, $ph, $addr, $isText($cell($r, 4)) ? $cell($r, 4) : '', $rem, b2b_lead_status($rem)];
+    }
+    foreach ($find('denzu lead') as $i => $r) {
+        if ($i < 2) { continue; }
+        $ph = $phoneOf([$cell($r, 0)]); if ($ph === '') { continue; }
+        $leads[] = ['denzuu', $cell($r, 1) !== '' ? $cell($r, 1) : 'Lead ' . $ph, '', $ph, $cell($r, 2), '', '', 'Not called'];
+    }
+    foreach ($find('samples') as $i => $r) {
+        $n = $cell($r, 0); if ($i === 0 || $n === '') { continue; }
+        $leads[] = ['sample', $n, '', '', $cell($r, 1), '', 'Sample to send', 'Sample'];
+    }
+    $meta = ['prospects' => 0, 'newdata' => 0, 'samples' => 0, 'leads' => 0, 'hot' => 0];
+    foreach ($leads as $l) { $meta[['calling' => 'newdata', 'prospect' => 'prospects', 'denzuu' => 'leads', 'sample' => 'samples'][$l[0]]]++; if ($l[7] === 'Interested') { $meta['hot']++; } }
 
     $pdo = db(); $pdo->beginTransaction();
     try {
-        foreach (['b2b_dist', 'b2b_order', 'b2b_coll', 'b2b_meta'] as $t) { $pdo->exec("DELETE FROM $t"); }
+        foreach (['b2b_dist', 'b2b_order', 'b2b_coll', 'b2b_meta', 'b2b_lead'] as $t) { $pdo->exec("DELETE FROM $t"); }
         $ins = $pdo->prepare('INSERT INTO b2b_dist (k, name, outstanding, flags, case_note, contact, phone, status, purpose, next_date, next_text, last_contact, first_contact, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($dist as $k => $d) { $ins->execute([$k, $d['name'], $d['outstanding'], implode(',', $d['flags']), $d['case_note'], $d['contact'], $d['phone'], $d['status'], $d['purpose'], $d['next_date'], $d['next_text'], $d['last_contact'], $d['first_contact'], $d['remark']]); }
         $io = $pdo->prepare('INSERT INTO b2b_order (month, k, amount) VALUES (?,?,?)'); foreach ($orders as $o) { $io->execute($o); }
         $ic = $pdo->prepare('INSERT INTO b2b_coll (day, k, amount, raw) VALUES (?,?,?,?)'); foreach ($colls as $c) { $ic->execute($c); }
+        $il = $pdo->prepare('INSERT INTO b2b_lead (src, name, area, phone, address, contact, remark, status) VALUES (?,?,?,?,?,?,?,?)'); foreach ($leads as $l) { $il->execute([$l[0], mb_substr($l[1], 0, 120), mb_substr($l[2], 0, 60), $l[3], mb_substr($l[4], 0, 200), mb_substr($l[5], 0, 60), mb_substr($l[6], 0, 300), $l[7]]); }
         $im = $pdo->prepare('INSERT INTO b2b_meta (k, v) VALUES (?,?)'); foreach ($meta + ['synced_at' => date('Y-m-d H:i:s')] as $k => $v) { $im->execute([$k, (string)$v]); }
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
@@ -213,4 +239,24 @@ function b2b_sync_channel(): void
         $each = round((float)$m['s'] / count($days), 2); $rest = round((float)$m['s'] - $each * (count($days) - 1), 2);
         foreach ($days as $i => $d) { $ins->execute([$cid, $d, $i === count($days) - 1 ? $rest : $each, $i === 0 ? (int)$m['n'] : 0, date('Y-m-d H:i:s')]); }
     }
+}
+
+/** What a calling remark means: Interested, Follow up, Details shared, No answer, Not interested, Sample, Existing, Blocked, Language, Other, or Not called. */
+function b2b_lead_status(string $remark): string
+{
+    $r = strtolower(trim($remark));
+    if ($r === '') { return 'Not called'; }
+    if (preg_match('/blocked/', $r)) { return 'Blocked'; }
+    if (preg_match('/invalid|wrong (deails|details|number|no)/', $r)) { return 'Invalid number'; }
+    if (preg_match('/already (have|par|cusomer|customer)|alread|part in his area/', $r)) { return 'Existing'; }
+    if (preg_match('/no[t]?\s*(want|wan |int[a-z]*rest|intr|intres|inres)|not intr|dont want|don.t want|no intrested|not intrested|not intrresed|inresed/', $r)) { return 'Not interested'; }
+    if (preg_match('/frenchie|franchi|compan[a-z]* outlet|company outlet/', $r)) { return 'Company outlet'; }
+    if (preg_match('/good prospect|ready to dispatch|interested|intrested/', $r)) { return 'Interested'; }
+    if (preg_match('/sample/', $r)) { return 'Sample'; }
+    if (preg_match('/call not|call no|no received|no recieved|not received|not recei|no aended|switch|swich|call cut|call cu\b|not available|incoming|busy|bus on|not pick|no answer|not connect/', $r)) { return 'No answer'; }
+    if (preg_match('/details? share|deails share|whatsapp|whasapp/', $r)) { return 'Details shared'; }
+    if (preg_match('/process|follow|later|ime laer|callback|call back|tomorrow|next week|ma be|may be/', $r)) { return 'Follow up'; }
+    if (preg_match('/language|tamil|telugu|kannada/', $r)) { return 'Language'; }
+    if ($r === 'done') { return 'Done'; }
+    return 'Other';
 }

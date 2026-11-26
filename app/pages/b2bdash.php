@@ -112,8 +112,26 @@ layout_head('Bhanu credit offline');
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Party</th><th class="r">Outstanding</th></tr></thead><tbody>
   <?php foreach ($blocked as $d): ?><tr><td><strong><?= h($d['name']) ?></strong></td><td class="r"><?= $d['outstanding'] > 0 ? h(inr((float)$d['outstanding'])) : '–' ?></td></tr><?php endforeach; ?></tbody></table></div></section>
 
-<?php elseif ($tabNow === 'pipeline'): ?>
-<div class="kpis kpis--4"><?= $kpi('New prospects', (string)($meta['prospects'] ?? 0), 'in the New Prospect tab', 'users') ?><?= $kpi('Calling list', (string)($meta['newdata'] ?? 0), 'firms in the New Data tab · ' . ($meta['hot'] ?? 0) . ' hot', 'users') ?><?= $kpi('Denzuu leads', (string)($meta['leads'] ?? 0), 'distributor leads', 'users') ?><?= $kpi('Samples to send', (string)($meta['samples'] ?? 0), '', 'bag') ?></div>
-<section class="card"><p class="muted">Counts come straight from the sheet's New Prospect, New Data, denzu lead and Samples tabs.</p></section>
+<?php elseif ($tabNow === 'pipeline'):
+  $srcs = ['calling' => 'Calling list', 'prospect' => 'New prospects', 'denzuu' => 'Denzuu leads', 'sample' => 'Samples to send'];
+  $src = isset($srcs[$_GET['s'] ?? '']) ? $_GET['s'] : 'calling'; $stf = (string)($_GET['st'] ?? ''); $qs = trim((string)($_GET['q'] ?? ''));
+  $cnt = []; foreach ($q('SELECT src, COUNT(*) n FROM b2b_lead GROUP BY src') as $r) { $cnt[$r['src']] = (int)$r['n']; }
+  $stc = []; foreach ($q('SELECT status, COUNT(*) n FROM b2b_lead WHERE src = ? GROUP BY status ORDER BY n DESC', [$src]) as $r) { $stc[$r['status']] = (int)$r['n']; }
+  $sql = 'SELECT * FROM b2b_lead WHERE src = ?'; $args = [$src];
+  if ($stf !== '' && isset($stc[$stf])) { $sql .= ' AND status = ?'; $args[] = $stf; }
+  if ($qs !== '') { $sql .= ' AND (name LIKE ? OR area LIKE ? OR phone LIKE ? OR remark LIKE ?)'; array_push($args, "%$qs%", "%$qs%", "%$qs%", "%$qs%"); }
+  $leadRows = $q($sql . ' ORDER BY rowid', $args);
+  $pk = ['v' => 'bhanu', 't' => 'pipeline'] + $keep;
+  $stCls = fn($s2) => in_array($s2, ['Interested', 'Follow up', 'Sample'], true) ? '' : (in_array($s2, ['Not interested', 'Blocked', 'Existing', 'Invalid number', 'Company outlet'], true) ? 'chip--bad' : 'chip--warn'); ?>
+<div class="pagehead__r" style="margin:0 0 12px;flex-wrap:wrap"><?php foreach ($srcs as $sk => $sl): ?><a class="btn btn--sm <?= $sk === $src ? '' : 'btn--ghost' ?>" href="<?= h(url('offlinedash', $pk + ['s' => $sk])) ?>"><?= h($sl) ?> (<?= (int)($cnt[$sk] ?? 0) ?>)</a> <?php endforeach; ?></div>
+<section class="card"><div class="card__h"><h2><?= h($srcs[$src]) ?></h2><span class="muted tiny"><?= count($leadRows) ?> shown</span></div>
+  <?php if ($stc): ?><div style="margin-bottom:10px"><a class="chip <?= $stf === '' ? '' : 'chip--warn' ?>" href="<?= h(url('offlinedash', $pk + ['s' => $src])) ?>">All <?= array_sum($stc) ?></a> <?php foreach ($stc as $sn => $cn): ?><a class="chip <?= $stf === $sn ? '' : 'chip--warn' ?>" href="<?= h(url('offlinedash', $pk + ['s' => $src, 'st' => $sn])) ?>"><?= h($sn) ?> <?= $cn ?></a> <?php endforeach; ?></div><?php endif; ?>
+  <form method="get" class="formrow"><input type="hidden" name="p" value="offlinedash"><input type="hidden" name="v" value="bhanu"><input type="hidden" name="t" value="pipeline"><input type="hidden" name="s" value="<?= h($src) ?>"><input type="hidden" name="st" value="<?= h($stf) ?>"><input type="hidden" name="month" value="<?= h($all ? 'all' : $m) ?>">
+    <label class="field grow"><span>Search</span><input name="q" value="<?= h($qs) ?>" placeholder="Name, city, phone or remark"></label><button class="btn btn--ghost" type="submit">Search</button></form>
+  <?php if (!$leadRows): ?><p class="muted">Nothing here yet. The list is read from the sheet (tabs New DaTa, New Prospect, denzu lead, Samples).</p><?php else: ?>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Name</th><th>City</th><th>Phone</th><?php if ($src !== 'denzuu'): ?><th>Call status</th><th>Remark</th><?php endif; ?><th class="hm">Address</th></tr></thead><tbody>
+  <?php foreach (array_slice($leadRows, 0, 400) as $l): ?><tr><td><strong><?= h($l['name']) ?></strong><?= $l['contact'] !== '' ? '<br><span class="muted tiny">' . h($l['contact']) . '</span>' : '' ?></td><td><?= h($l['area']) ?></td><td><?= $l['phone'] !== '' ? '<a href="tel:' . h($l['phone']) . '">' . h($l['phone']) . '</a>' : '–' ?></td>
+    <?php if ($src !== 'denzuu'): ?><td><span class="chip <?= $stCls($l['status']) ?>"><?= h($l['status']) ?></span></td><td><?= h($l['remark']) ?></td><?php endif; ?><td class="hm"><span class="tiny"><?= h($l['address']) ?></span></td></tr><?php endforeach; ?></tbody></table></div>
+  <?php if (count($leadRows) > 400): ?><p class="muted tiny">Showing the first 400. Use search to narrow down.</p><?php endif; ?><?php endif; ?></section>
 <?php endif; ?>
 <?php layout_foot();
