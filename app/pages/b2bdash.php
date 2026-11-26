@@ -25,9 +25,16 @@ $dueList = array_values(array_filter($dist, fn($d) => $d['next_date'] !== '' && 
 usort($dueList, fn($a, $b) => strcmp($a['next_date'], $b['next_date']));
 $silent = array_values(array_filter($dist, fn($d) => ($d['outstanding'] > 0 || in_array($d['status'], ['Active', 'Interested'], true)) && $d['last_contact'] !== '' && $daysAgo($d['last_contact']) >= 30 && !str_contains($d['flags'], 'Blocked')));
 usort($silent, fn($a, $b) => $b['outstanding'] <=> $a['outstanding']);
+$tomorrow = date('Y-m-d', strtotime($today . ' +1 day'));
+$remDist = array_values(array_filter($dist, fn($d) => $d['next_date'] !== '' && $d['next_date'] <= $tomorrow && $d['status'] !== 'Inactive' && !str_contains($d['flags'], 'Blocked')));
+usort($remDist, fn($a, $b) => strcmp($a['next_date'], $b['next_date']));
+$remLeads = $q("SELECT * FROM b2b_lead WHERE src IN ('calling','prospect') AND status IN ('No answer','Follow up') ORDER BY rowid");
+foreach ($remLeads as &$rl) { $rl['tried'] = ''; if (preg_match('~(\d{1,2})/(\d{1,2})/(\d{2,4})~', $rl['remark'], $mm)) { $yy = (int)$mm[3] < 100 ? 2000 + (int)$mm[3] : (int)$mm[3]; if (checkdate((int)$mm[2], (int)$mm[1], $yy)) { $rl['tried'] = sprintf('%04d-%02d-%02d', $yy, $mm[2], $mm[1]); } } } unset($rl);
+usort($remLeads, fn($a, $b) => [$a['status'] === 'Follow up' ? 0 : 1, $a['tried'] === '' ? 1 : 0, $a['tried']] <=> [$b['status'] === 'Follow up' ? 0 : 1, $b['tried'] === '' ? 1 : 0, $b['tried']]);
+$remCount = count($remDist) + count($remLeads);
 $pct = fn(float $v, float $t) => $t > 0 ? round($v / $t * 100) : 0;
 $keep = $all ? ['month' => 'all'] : ['month' => $m];
-$tabs = ['overview' => 'Overview', 'distributors' => 'Distributors', 'followups' => 'Follow-ups', 'legal' => 'Legal and blocked', 'pipeline' => 'Pipeline', 'invoices' => 'Invoices (CSV)'];
+$tabs = ['overview' => 'Overview', 'distributors' => 'Distributors', 'reminders' => 'Reminders (' . $remCount . ')', 'followups' => 'Follow-ups', 'legal' => 'Legal and blocked', 'pipeline' => 'Pipeline', 'invoices' => 'Invoices (CSV)'];
 $flagChips = fn(string $f) => implode(' ', array_map(fn($x) => '<span class="chip ' . ($x === 'Blocked' ? 'chip--bad' : 'chip--warn') . '">' . h($x) . '</span>', array_filter(explode(',', $f))));
 $kpi = fn(string $l, string $v, string $s = '', string $ic = 'trend', string $cls = '') => '<div class="kpi"><div class="kpi__top"><span class="kpi__l">' . h($l) . '</span><span class="kpi__ic ' . $cls . '">' . icon($ic) . '</span></div><strong class="kpi__v">' . $v . '</strong><span class="kpi__s">' . $s . '</span></div>';
 $nameCell = fn(array $d) => '<strong>' . h($d['name']) . '</strong>' . ($d['flags'] !== '' ? ' ' . $flagChips($d['flags']) : '');
@@ -91,6 +98,20 @@ layout_head('Bhanu credit offline');
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Distributor</th><th class="r">Outstanding</th><th class="r">Orders · <?= h($mLabel) ?></th><th class="r">Collected · <?= h($mLabel) ?></th><th class="hm">Last order</th><th class="hm">Status</th><th class="hm">Last contact</th><th class="hm">Contact</th></tr></thead><tbody>
   <?php foreach ($list as $d): ?><tr><td><?= $nameCell($d) ?></td><td class="r"><?= $d['outstanding'] > 0 ? '<strong>' . h(inr((float)$d['outstanding'])) . '</strong>' : '–' ?></td><td class="r"><?= isset($ord[$d['k']]) ? h(inr((float)$ord[$d['k']]['s'])) : '–' ?></td><td class="r"><?= isset($col[$d['k']]) ? h(inr((float)$col[$d['k']]['s'])) : '–' ?></td>
     <td class="hm"><?= isset($ordAll[$d['k']]) ? h(date('M Y', strtotime($ordAll[$d['k']]['last'] . '-01'))) : '–' ?></td><td class="hm"><?= h($d['status'] ?: '–') ?></td><td class="hm"><?= $d['last_contact'] ? h(fmt_date($d['last_contact'])) : '–' ?></td><td class="hm"><span class="tiny"><?= h(trim($d['contact'] . ' ' . $d['phone'])) ?></span></td></tr><?php endforeach; ?></tbody></table></div></section>
+
+<?php elseif ($tabNow === 'reminders'): ?>
+<div class="kpis kpis--4"><?= $kpi('Distributor follow-ups', (string)count($remDist), 'due today, overdue or tomorrow', 'target') ?><?= $kpi('Call again: no response', (string)count(array_filter($remLeads, fn($l) => $l['status'] === 'No answer')), 'calling list and prospects', 'users') ?><?= $kpi('Promised callbacks', (string)count(array_filter($remLeads, fn($l) => $l['status'] === 'Follow up')), '"talk later / may be prospect"', 'users') ?><?= $kpi('Tomorrow', (string)count(array_filter($remDist, fn($d) => $d['next_date'] === $tomorrow)), 'distributor calls dated tomorrow', 'target') ?></div>
+<section class="card"><div class="card__h"><h2>Distributor follow-ups and queries</h2><span class="muted tiny"><?= count($remDist) ?> to call, from the Follow-up Tracker</span></div>
+  <?php if (!$remDist): ?><p class="muted">No dated follow-ups are due today or tomorrow.</p><?php else: ?>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Distributor</th><th>When</th><th class="r">Outstanding</th><th>Query / requirement</th><th class="hm">Next step</th></tr></thead><tbody>
+  <?php foreach ($remDist as $d): $ago = $daysAgo($d['next_date']); ?><tr><td><?= $nameCell($d) ?><br><span class="muted tiny"><?= h(trim($d['contact'])) ?> <?= $d['phone'] !== '' ? '<a href="tel:' . h($d['phone']) . '">' . h($d['phone']) . '</a>' : '' ?></span></td>
+    <td><?= $d['next_date'] === $tomorrow ? '<span class="chip">Tomorrow</span>' : ($ago <= 0 ? '<span class="chip chip--warn">Today</span>' : '<span class="chip chip--bad">' . $ago . ' d overdue</span>') ?><br><span class="muted tiny"><?= h(fmt_date($d['next_date'])) ?></span></td>
+    <td class="r"><?= $d['outstanding'] > 0 ? h(inr((float)$d['outstanding'])) : '–' ?></td><td><?= h(mb_substr(trim($d['purpose'] . ' ' . $d['remark']), 0, 160)) ?></td><td class="hm"><?= h(mb_substr($d['next_text'], 0, 80)) ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>
+<section class="card"><div class="card__h"><h2>Call again: no response and promised callbacks</h2><span class="muted tiny"><?= count($remLeads) ?> leads, callbacks first, then oldest attempt</span></div>
+  <?php if (!$remLeads): ?><p class="muted">No leads waiting for a call-back.</p><?php else: ?>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Name</th><th>City</th><th>Phone</th><th>Status</th><th>Last remark</th><th class="hm">Last tried</th></tr></thead><tbody>
+  <?php foreach (array_slice($remLeads, 0, 300) as $l): ?><tr><td><strong><?= h($l['name']) ?></strong><br><span class="muted tiny"><?= $l['src'] === 'calling' ? 'Calling list' : 'New prospect' ?></span></td><td><?= h($l['area']) ?></td><td><?= $l['phone'] !== '' ? '<a href="tel:' . h($l['phone']) . '">' . h($l['phone']) . '</a>' : '–' ?></td>
+    <td><span class="chip <?= $l['status'] === 'Follow up' ? '' : 'chip--warn' ?>"><?= $l['status'] === 'Follow up' ? 'Call back' : 'No response' ?></span></td><td><?= h($l['remark']) ?></td><td class="hm"><?= $l['tried'] !== '' ? h(fmt_date($l['tried'])) . ' <span class="muted tiny">(' . $daysAgo($l['tried']) . ' d)</span>' : '–' ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>
 
 <?php elseif ($tabNow === 'followups'):
   $sc = []; foreach ($dist as $d) { if ($d['last_contact'] !== '' || $d['status'] !== '') { $sc[$d['status'] ?: 'Not marked'] = ($sc[$d['status'] ?: 'Not marked'] ?? 0) + 1; } } arsort($sc); ?>
