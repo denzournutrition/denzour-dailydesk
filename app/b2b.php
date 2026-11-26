@@ -140,6 +140,8 @@ function b2b_import(string $path): string
     $orders = []; $cur = '';
     foreach ($find('order sheet') as $r) {
         $a = $cell($r, 0); $b = $cell($r, 1); $g = $r[6] ?? '';
+        // a month heading can be a real date cell (Excel stores "August 07" as a number)
+        foreach ([$a, $b] as $t) { if (preg_match('/^\d{5}$/', $t) && $amt($g) <= 0) { $ts = ((int)$t - 25569) * 86400; if ($ts > 0) { $cur = b2b_ym((int)gmdate('n', $ts), (int)gmdate('Y', $ts)); continue 2; } } }
         $hdr = null; foreach ([$a, $b] as $t) { if (preg_match('/^(?:month\s*)?(january|february|march|april|may|june|july|august|september|october|november|december)\b/i', trim($t, " ,"), $m)) { $hdr = $m[1]; } }
         if ($hdr !== null && $amt($g) <= 0) { $cur = b2b_ym(b2b_month_no($hdr)); continue; }
         if ($a === '' || $cur === '' || $amt($g) <= 0) { continue; }
