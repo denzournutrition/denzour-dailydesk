@@ -38,10 +38,11 @@ function channels_migrate(PDO $pdo): void
     // One-time: the team's offline channel is simply called "Offline"; Bhanu's sheet line is "Bhanu credit offline" and counts as offline
     try {
         $pdo->exec("UPDATE sales_channels SET name = 'Offline' WHERE name = 'Offline: gyms and supplement stores' AND NOT EXISTS (SELECT 1 FROM sales_channels WHERE name = 'Offline')");
-        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_bhanu_offline'")->fetchColumn()) {
-            $pdo->exec("INSERT OR REPLACE INTO track_cls (name_key, channel) VALUES ('bhanuverma', 'offline')");
-            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('track_alias:bhanuverma', 'Bhanu credit offline')");
-            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_bhanu_offline', '1')");
+        // Bhanu Verma in the main sheet is the Inside Sales Bhanu: an earlier version wrongly renamed him "Bhanu credit offline" and made him offline
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'fix_bhanu_inside'")->fetchColumn()) {
+            $pdo->exec("DELETE FROM settings WHERE k = 'track_alias:bhanuverma'");
+            $pdo->exec("DELETE FROM track_cls WHERE name_key = 'bhanuverma'");
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('fix_bhanu_inside', '1')");
         }
     } catch (Throwable $e) { /* never block start-up */ }
     if ((int)$pdo->query('SELECT COUNT(*) FROM sales_channels')->fetchColumn() === 0) {

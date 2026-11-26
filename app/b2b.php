@@ -186,7 +186,29 @@ function b2b_import(string $path): string
         $im = $pdo->prepare('INSERT INTO b2b_meta (k, v) VALUES (?,?)'); foreach ($meta + ['synced_at' => date('Y-m-d H:i:s')] as $k => $v) { $im->execute([$k, (string)$v]); }
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    b2b_sync_channel();
     return 'Read ' . count($dist) . ' distributors, ' . count($orders) . ' orders, ' . count($colls) . ' collections, ' . $followN . ' follow-ups.';
 }
 
 function b2b_has_data(): bool { return (int)db()->query('SELECT COUNT(*) FROM b2b_dist')->fetchColumn() > 0; }
+
+/**
+ * The offline Bhanu's order value (Order Sheet, by month) becomes the "Bhanu credit offline" channel on the Sales overview.
+ * The sheet has no order dates, so a month's value is spread evenly over its days (up to today for the current month).
+ * Days that already have uploaded invoices or a hand-typed entry are left alone.
+ */
+function b2b_sync_channel(): void
+{
+    $pdo = db(); $cid = offline_channel_id('bhanu'); $today = today();
+    $pdo->prepare("DELETE FROM channel_daily WHERE channel_id = ? AND note = 'From Distributors sheet'")->execute([$cid]);
+    $has = $pdo->prepare('SELECT 1 FROM channel_daily WHERE channel_id = ? AND day = ?');
+    $ins = $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) VALUES (?,?,?,?,0,'From Distributors sheet',?)");
+    foreach ($pdo->query('SELECT month, SUM(amount) s, COUNT(*) n FROM b2b_order GROUP BY month')->fetchAll() as $m) {
+        $first = $m['month'] . '-01'; $last = min(date('Y-m-t', strtotime($first)), $today);
+        if ($last < $first) { continue; }
+        $days = []; for ($d = $first; $d <= $last; $d = date('Y-m-d', strtotime($d . ' +1 day'))) { $has->execute([$cid, $d]); if (!$has->fetchColumn()) { $days[] = $d; } }
+        if (!$days) { continue; }
+        $each = round((float)$m['s'] / count($days), 2); $rest = round((float)$m['s'] - $each * (count($days) - 1), 2);
+        foreach ($days as $i => $d) { $ins->execute([$cid, $d, $i === count($days) - 1 ? $rest : $each, $i === 0 ? (int)$m['n'] : 0, date('Y-m-d H:i:s')]); }
+    }
+}
