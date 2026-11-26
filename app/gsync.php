@@ -87,6 +87,8 @@ function gsync_run(int $id): string
         if ($l['kind'] === 'targets') {
             $month = preg_match('/^\d{4}-\d{2}$/', (string)($l['month'] ?? '')) ? (string)$l['month'] : substr(today(), 0, 7);
             $msg = track_import($tmp, $month);
+        } elseif ($l['kind'] === 'inf') {
+            $msg = inf_import($tmp);
         } elseif ($l['kind'] === 'b2b') {
             $msg = b2b_import($tmp);
         } elseif ($l['kind'] === 'sales') {
