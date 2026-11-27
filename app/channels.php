@@ -126,12 +126,23 @@ function offline_import(string $path, string $stream = 'offline'): array
     $cid = offline_channel_id($stream);
     $pdo->beginTransaction();
     try {
+        // an invoice that was saved earlier under a wrong date is removed too (same invoice number), and its old day is rebuilt below
+        $oldDays = [];
+        $ph = implode(',', array_fill(0, count($rows), '?'));
+        $st0 = $pdo->prepare("SELECT DISTINCT day FROM offline_orders WHERE stream = ? AND no IN ($ph) AND day NOT BETWEEN ? AND ?");
+        $st0->execute(array_merge([$stream], array_keys($rows), [$from, $to])); $oldDays = $st0->fetchAll(PDO::FETCH_COLUMN);
+        $pdo->prepare("DELETE FROM offline_orders WHERE stream = ? AND no IN ($ph)")->execute(array_merge([$stream], array_keys($rows)));
         $pdo->prepare('DELETE FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ?')->execute([$stream, $from, $to]);
         $ins = $pdo->prepare('INSERT OR REPLACE INTO offline_orders (no, day, customer, phone, seller, status, note, total, advance, balance, stream) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($rows as $r) { $ins->execute($r); }
         $pdo->prepare('DELETE FROM channel_daily WHERE channel_id = ? AND day BETWEEN ? AND ?')->execute([$cid, $from, $to]);
         $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) SELECT ?, day, ROUND(SUM(total),2), COUNT(*), 0, 'Imported invoices', ? FROM offline_orders WHERE stream = ? AND day BETWEEN ? AND ? GROUP BY day")
             ->execute([$cid, date('Y-m-d H:i:s'), $stream, $from, $to]);
+        foreach ($oldDays as $od) {
+            $pdo->prepare('DELETE FROM channel_daily WHERE channel_id = ? AND day = ?')->execute([$cid, $od]);
+            $pdo->prepare("INSERT INTO channel_daily (channel_id, day, sales, orders, user_id, note, updated_at) SELECT ?, day, ROUND(SUM(total),2), COUNT(*), 0, 'Imported invoices', ? FROM offline_orders WHERE stream = ? AND day = ? GROUP BY day")
+                ->execute([$cid, date('Y-m-d H:i:s'), $stream, $od]);
+        }
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
     return ['rows' => count($rows), 'from' => $from, 'to' => $to, 'sales' => array_sum(array_column($rows, 7)), 'skipped' => $skipped, 'why' => $skipWhy];
@@ -394,9 +405,26 @@ function offline_import_xlsx(string $path, string $stream = 'offline'): array
             if (in_array('date', $n, true) && (in_array('total', $n, true) || in_array('amount', $n, true))) { $hi = $i; $dateCol = array_search('date', $n, true); break; }
         }
         if ($hi < 0) { continue; }
+        // Dates: text like 26-11-2026 is day first. A real date cell can come out of Google with day and month swapped when the sheet's locale is US
+        // (12-11-2026 read as 11 Dec); for those, take whichever of the two readings sits closer to the sheet's other dates.
+        $cands = []; $known = [];
+        foreach ($t['rows'] as $i => $r) {
+            if ($i <= $hi) { continue; }
+            $v = $r[$dateCol] ?? '';
+            if (is_numeric($v) && (float)$v > 30000) {
+                $ts = ((int)floor((float)$v) - 25569) * 86400; $y = (int)gmdate('Y', $ts); $m = (int)gmdate('n', $ts); $d = (int)gmdate('j', $ts);
+                $c = [sprintf('%04d-%02d-%02d', $y, $m, $d)]; if ($d <= 12 && $d !== $m) { $c[] = sprintf('%04d-%02d-%02d', $y, $d, $m); }
+            } else { $d0 = offline_date((string)$v); $c = $d0 !== '' ? [$d0] : []; }
+            $cands[$i] = $c; if (count($c) === 1) { $known[] = strtotime($c[0]); }
+        }
+        sort($known); $med = $known ? $known[intdiv(count($known), 2)] : null;
         $tmp = tempnam(sys_get_temp_dir(), 'of'); $fh = fopen($tmp, 'w');
-        foreach (array_slice($t['rows'], $hi) as $k => $r) {
-            if ($k > 0 && isset($r[$dateCol]) && is_numeric($r[$dateCol]) && (float)$r[$dateCol] > 30000) { $r[$dateCol] = gmdate('d-m-Y', ((int)floor((float)$r[$dateCol]) - 25569) * 86400); }
+        foreach (array_slice($t['rows'], $hi, null, true) as $i => $r) {
+            if ($i > $hi) {
+                $c = $cands[$i] ?? []; $pick = $c[0] ?? '';
+                if (count($c) > 1 && $med !== null) { usort($c, fn($a, $b) => abs(strtotime($a) - $med) <=> abs(strtotime($b) - $med)); $pick = $c[0]; }
+                if ($pick !== '') { $r[$dateCol] = $pick; }
+            }
             fputcsv($fh, array_map(fn($c) => is_float($c) ? rtrim(rtrim(sprintf('%.3F', $c), '0'), '.') : (string)$c, $r), ',', '"', '');
         }
         fclose($fh);
