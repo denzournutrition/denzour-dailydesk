@@ -53,6 +53,10 @@ if (!has_users()) {
     $p = 'install';
 }
 
+if (!in_array($p, ['avatar', 'ecomlogo', 'export', 'exports', 'gsynccron'], true) && extension_loaded('zlib') && !headers_sent()) {
+    @ini_set('zlib.output_compression', '1');   // pages are mostly tables: roughly 6x smaller over the wire
+}
+
 $u = user();
 if ($p === '' || !isset($routes[$p])) {
     redirect($u ? home_for($u) : url('login'));

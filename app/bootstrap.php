@@ -77,7 +77,19 @@ function db(): PDO
     ]);
     $pdo->exec('PRAGMA foreign_keys = ON');
     $pdo->exec('PRAGMA busy_timeout = 5000');
-    migrate($pdo);
+    try {   // faster writes and reads; WAL lets a sync write while pages are being read
+        $pdo->exec('PRAGMA journal_mode = WAL');
+        $pdo->exec('PRAGMA synchronous = NORMAL');
+        $pdo->exec('PRAGMA temp_store = MEMORY');
+        $pdo->exec('PRAGMA cache_size = -20000');
+        $pdo->exec('PRAGMA mmap_size = 134217728');
+    } catch (Throwable $e) { /* keep the defaults */ }
+    // The table checks and one-time seeds run once after each update (VERSION changes), not on every page view.
+    $want = max(1, crc32(trim((string)@file_get_contents(dirname(__DIR__) . '/VERSION'))) & 0x7fffffff);
+    if ((int)$pdo->query('PRAGMA user_version')->fetchColumn() !== $want) {
+        migrate($pdo);
+        $pdo->exec('PRAGMA user_version = ' . $want);
+    }
     return $pdo;
 }
 

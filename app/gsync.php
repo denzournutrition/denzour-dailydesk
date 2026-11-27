@@ -140,11 +140,16 @@ function gsync_run_due(): int
 /** Cheap hook for normal page views: at most one check a minute, runs after the response is sent. */
 function gsync_auto(): void
 {
-    $f = dirname(__DIR__) . '/data/gsync.tick';
+    $dir = dirname(__DIR__) . '/data/';
+    $cronAge = time() - (int)@filemtime($dir . 'gsync.cron');
+    if ($cronAge < 900) { return; }                       // the cPanel cron is syncing; page views stay fast
+    $canFinish = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+    if (!$canFinish && $cronAge < 7200) { return; }       // without a way to send the page first, a sync would make this view wait
+    $f = $dir . 'gsync.tick';
     if ((int)@filemtime($f) > time() - 60) { return; }
     @touch($f);
     register_shutdown_function(function () {
-        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); } elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
         try { gsync_run_due(); } catch (Throwable $e) { /* never break a page */ }
     });
 }

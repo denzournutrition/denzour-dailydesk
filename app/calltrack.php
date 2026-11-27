@@ -23,7 +23,8 @@ function ct_migrate(PDO $pdo): void
     $pdo->exec("CREATE TABLE IF NOT EXISTS ct_call (
         person TEXT NOT NULL, day TEXT NOT NULL DEFAULT '', rown INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
         city TEXT NOT NULL DEFAULT '', cat TEXT NOT NULL DEFAULT 'todo', disp TEXT NOT NULL DEFAULT '', remark TEXT NOT NULL DEFAULT '', due TEXT NOT NULL DEFAULT '', hint TEXT NOT NULL DEFAULT '')");
-    $pdo->exec('CREATE INDEX IF NOT EXISTS ct_call_p ON ct_call (person, phone)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS ct_call_p ON ct_call (person, phone, cat, day, rown)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS ct_call_d ON ct_call (person, day)');
     try {
         if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_call_sheets_v2'")->fetchColumn()) {
             foreach (CT_SHEETS as [$label, $id]) {
