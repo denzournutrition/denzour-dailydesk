@@ -15,6 +15,7 @@ function inf_migrate(PDO $pdo): void
     $pdo->exec("CREATE TABLE IF NOT EXISTS inf_perf (month TEXT PRIMARY KEY, sales REAL NOT NULL DEFAULT 0, spend REAL NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS inf_pay (block TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '', total REAL NOT NULL DEFAULT 0, net REAL NOT NULL DEFAULT 0, comm REAL NOT NULL DEFAULT 0, paid INTEGER NOT NULL DEFAULT 0)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS inf_barter (grp TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '', insta TEXT NOT NULL DEFAULT '', product TEXT NOT NULL DEFAULT '', reel TEXT NOT NULL DEFAULT '')");
+    offline_seed_link($pdo);
     $pdo->exec("CREATE TABLE IF NOT EXISTS inf_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL DEFAULT '')");
     try {
         if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_inf_sheet'")->fetchColumn()) {
@@ -24,6 +25,22 @@ function inf_migrate(PDO $pdo): void
                     ->execute(['Influencers (Sourabh)', 'inf', 0, INF_SHEET_ID, 'https://docs.google.com/spreadsheets/d/' . INF_SHEET_ID . '/edit', 5, date('Y-m-d H:i:s'), '']);
             }
             $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_inf_sheet', '1')");
+        }
+    } catch (Throwable $e) { /* never block start-up */ }
+}
+
+/** Offline team invoice sheet (Shajadi, Md Shabik, Ankit Yadav, Tanya Chauhan, Bivakar Anand): linked once, read every 5 minutes. */
+function offline_seed_link(PDO $pdo): void
+{
+    $id = '1c6GTDIXTp9faNUgdWhpzhfCs4PsO09LsUZ-lm4wHgtI';
+    try {
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_off_sheet'")->fetchColumn()) {
+            $has = $pdo->prepare('SELECT 1 FROM gsync_links WHERE sheet_id = ?'); $has->execute([$id]);
+            if (!$has->fetchColumn()) {
+                $pdo->prepare("INSERT INTO gsync_links (label, kind, user_id, sheet_id, url, every_min, created_at, month) VALUES (?,?,?,?,?,?,?,?)")
+                    ->execute(['Offline team invoices', 'offline', 0, $id, 'https://docs.google.com/spreadsheets/d/' . $id . '/edit', 5, date('Y-m-d H:i:s'), '']);
+            }
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_off_sheet', '1')");
         }
     } catch (Throwable $e) { /* never block start-up */ }
 }

@@ -377,3 +377,25 @@ function period_bar(string $page, array $P, array $keep = []): string
     }
     return $o . '</form>';
 }
+
+
+/** Reads the first tab of a workbook that has an invoice table (Date and Total columns) and imports it like the CSV upload. */
+function offline_import_xlsx(string $path, string $stream = 'offline'): array
+{
+    foreach (xlsx_read($path) as $t) {
+        $hi = -1;
+        foreach (array_slice($t['rows'], 0, 8, true) as $i => $r) {
+            $n = array_map(fn($c) => strtolower(preg_replace('/[^a-z]+/i', '', (string)$c)), $r);
+            if (in_array('date', $n, true) && (in_array('total', $n, true) || in_array('amount', $n, true))) { $hi = $i; $dateCol = array_search('date', $n, true); break; }
+        }
+        if ($hi < 0) { continue; }
+        $tmp = tempnam(sys_get_temp_dir(), 'of'); $fh = fopen($tmp, 'w');
+        foreach (array_slice($t['rows'], $hi) as $k => $r) {
+            if ($k > 0 && isset($r[$dateCol]) && is_numeric($r[$dateCol]) && (float)$r[$dateCol] > 30000) { $r[$dateCol] = gmdate('d-m-Y', ((int)floor((float)$r[$dateCol]) - 25569) * 86400); }
+            fputcsv($fh, array_map(fn($c) => is_float($c) ? rtrim(rtrim(sprintf('%.3F', $c), '0'), '.') : (string)$c, $r), ',', '"', '');
+        }
+        fclose($fh);
+        try { return offline_import($tmp, $stream); } finally { @unlink($tmp); }
+    }
+    throw new RuntimeException('No invoice table found. The sheet needs a header row with Date and Total columns.');
+}

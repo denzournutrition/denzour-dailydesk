@@ -4,6 +4,15 @@ $pdo = db(); $me = user(); $today = today();
 $bh = ($_GET['v'] ?? '') === 'bhanu'; $stream = $bh ? 'bhanu' : 'offline'; $title = OFFLINE_STREAMS[$stream];
 $canUp = can_enter_channels($me);
 
+$canTarget = in_array($me['role'], ['admin', 'ceo'], true);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canTarget && ($_POST['do'] ?? '') === 'targets') {
+    csrf_verify();
+    $tt = (float)preg_replace('/[^0-9.]/', '', (string)($_POST['total'] ?? '')); $te = (float)preg_replace('/[^0-9.]/', '', (string)($_POST['each'] ?? ''));
+    if ($tt > 0) { set_setting('off_target_total', (string)round($tt)); }
+    if ($te > 0) { set_setting('off_target_each', (string)round($te)); }
+    flash('ok', 'Offline targets saved.');
+    redirect(url('offlinedash', array_filter(['range' => $_GET['range'] ?? null, 'month' => $_GET['month'] ?? null])));
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canUp) {
     csrf_verify();
     $f = $_FILES['csv'] ?? null;
@@ -87,6 +96,32 @@ layout_head($title . ' dashboard');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Customers owing</span><span class="kpi__ic"><?= icon('users') ?></span></div><strong class="kpi__v"><?= count($owing) ?> <span class="muted tiny">of <?= count($cust) ?></span></strong><span class="kpi__s">Oldest unpaid: <?= $oldest ? h(fmt_date($oldest)) . ' (' . $daysAgo($oldest) . ' days)' : '–' ?></span></div>
 <?php endif; ?>
 </div>
+
+<?php if (!$bh && $P['isMonth']):
+  $tgtTotal = (float)setting('off_target_total', '2500000'); $tgtEach = (float)setting('off_target_each', '500000');
+  $mStart = $P['month'] . '-01'; $dim = (int)date('t', strtotime($mStart)); $isCur = $P['month'] === substr($today, 0, 7);
+  $elapsed = $isCur ? (int)substr($today, 8, 2) : ($P['month'] < substr($today, 0, 7) ? $dim : 0); $left = $isCur ? $dim - $elapsed : 0;
+  $proj = fn(float $v) => $elapsed > 0 ? $v / $elapsed * $dim : 0.0;
+  $custBy = []; $bigBy = []; foreach ($rows as $r) { $custBy[$r['seller']][strtolower(trim($r['customer']))] = 1; $bigBy[$r['seller']] = max($bigBy[$r['seller']] ?? 0, (float)$r['total']); }
+  $paceNow = $tgtTotal * ($elapsed / max(1, $dim)); $needDay = $left > 0 ? max(0.0, $tgtTotal - $sales) / $left : 0.0; $pj = $proj($sales); $big = $rows ? max(array_column($rows, 'total')) : 0; ?>
+<section class="card"><div class="card__h"><h2>Target · <?= h($P['label']) ?></h2><span class="muted tiny">team <?= h(inr_short($tgtTotal)) ?> · <?= h(inr_short($tgtEach)) ?> each</span></div>
+  <div class="kpis kpis--4" style="margin-bottom:12px">
+    <div class="kpi"><div class="kpi__top"><span class="kpi__l">Achieved</span><span class="kpi__ic kpi__ic--ok"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short($sales)) ?></strong><span class="kpi__s"><?= $pct($sales, $tgtTotal) ?>% of <?= h(inr_short($tgtTotal)) ?></span></div>
+    <div class="kpi"><div class="kpi__top"><span class="kpi__l">Still to make</span><span class="kpi__ic kpi__ic--warn"><?= icon('target') ?></span></div><strong class="kpi__v"><?= h(inr_short(max(0.0, $tgtTotal - $sales))) ?></strong><span class="kpi__s"><?= $left ?> days left after today<?= $left > 0 ? ' · ' . h(inr_short($needDay)) . ' a day' : '' ?></span></div>
+    <div class="kpi"><div class="kpi__top"><span class="kpi__l">Month-end at this pace</span><span class="kpi__ic"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($pj)) ?></strong><span class="kpi__s"><?= $pj >= $tgtTotal ? 'on track for the target' : h(inr_short($tgtTotal - $pj)) . ' short at this pace' ?></span></div>
+    <div class="kpi"><div class="kpi__top"><span class="kpi__l">Ahead or behind today</span><span class="kpi__ic"><?= icon('check') ?></span></div><strong class="kpi__v"><?= $sales >= $paceNow ? '+' : '-' ?><?= h(inr_short(abs($sales - $paceNow))) ?></strong><span class="kpi__s">against an even pace of <?= h(inr_short($paceNow)) ?> by today</span></div>
+  </div>
+  <div class="meter"><i style="width:<?= min(100, $pct($sales, $tgtTotal)) ?>%"></i><b style="left:<?= min(100, round($elapsed / max(1, $dim) * 100)) ?>%" title="Where an even pace would be today"></b></div>
+  <p class="muted tiny" style="margin:2px 0 12px">The marker shows where an even daily pace would be by today.</p>
+  <div class="tblwrap"><table class="tbl"><thead><tr><th>Seller</th><th class="r">Achieved</th><th class="r">Target</th><th style="width:22%">Progress</th><th class="r">Still to make</th><th class="r hm">A day needed</th><th class="r hm">At this pace</th><th class="r hm">Invoices</th><th class="r hm">Customers</th><th class="r hm">Biggest</th><th>Status</th></tr></thead><tbody>
+  <?php foreach ($sellers as $sl): $st = (float)$sl['sales']; $pp = $proj($st); $rem = max(0.0, $tgtEach - $st); $ok = $st >= $tgtEach; $okp = $pp >= $tgtEach; ?>
+    <tr><td><strong><?= h($sl['seller'] ?: 'No seller') ?></strong></td><td class="r"><strong><?= h(inr($st)) ?></strong></td><td class="r"><?= h(inr($tgtEach)) ?></td>
+      <td><div class="hbar__t"><i style="width:<?= min(100, $pct($st, $tgtEach)) ?>%"></i></div><span class="muted tiny"><?= $pct($st, $tgtEach) ?>%</span></td><td class="r"><?= $ok ? '–' : h(inr($rem)) ?></td><td class="r hm"><?= !$ok && $left > 0 ? h(inr($rem / $left)) : '–' ?></td><td class="r hm"><?= h(inr_short($pp)) ?></td><td class="r hm"><?= (int)$sl['orders'] ?></td><td class="r hm"><?= count($custBy[$sl['seller']] ?? []) ?></td><td class="r hm"><?= h(inr_short((float)($bigBy[$sl['seller']] ?? 0))) ?></td>
+      <td><span class="chip <?= $ok ? 'chip--ok' : ($okp ? '' : 'chip--warn') ?>"><?= $ok ? 'Target hit' : ($okp ? 'On track' : 'Behind') ?></span></td></tr>
+  <?php endforeach; ?></tbody></table></div>
+  <?php if ($canTarget): ?><form method="post" class="formrow" style="margin-top:12px"><?= csrf_field() ?><input type="hidden" name="do" value="targets">
+    <label class="field"><span>Team target (₹)</span><input name="total" value="<?= h((string)(int)$tgtTotal) ?>" inputmode="numeric"></label><label class="field"><span>Each seller (₹)</span><input name="each" value="<?= h((string)(int)$tgtEach) ?>" inputmode="numeric"></label><button class="btn btn--ghost" type="submit">Save targets</button></form><?php endif; ?></section>
+<?php endif; ?>
 
 <?php if ($bh): ?>
 <section class="card"><div class="card__h"><h2>Outstanding by age</h2><strong><?= h(inr($bal)) ?></strong></div>
