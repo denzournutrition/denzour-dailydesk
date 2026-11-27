@@ -142,6 +142,14 @@ if (!$existing && $form['type'] === 'work' && !$form['tasks'] && $_SERVER['REQUE
     }
     $prefilled = true;
 }
+$ctPerson = ct_person_for($u);
+$ctStat = $ctPerson ? ct_day_stats($ctPerson, $date) : null;
+if ($ctPerson && !$existing && $form['type'] === 'work' && $_SERVER['REQUEST_METHOD'] !== 'POST' && $ctStat['calls'] > 0) {
+    $s = $ctStat;
+    array_unshift($form['tasks'], ['title' => 'Customer calling', 'category' => 'Execution', 'hours' => '', 'status' => 'done',
+        'remarks' => $s['calls'] . ' calls · ' . $s['picked'] . ' picked up · ' . $s['interested'] . ' interested · ' . $s['orders'] . ' orders · ' . $s['noans'] . ' no answer / off / wrong (from your calling sheet)']);
+    $prefilled = true;
+}
 if (!$form['tasks'] && $form['type'] === 'work') {
     $form['tasks'][] = ['title' => '', 'category' => 'Execution', 'hours' => '', 'status' => 'done', 'remarks' => ''];
 }
@@ -210,8 +218,10 @@ layout_head('Daily report');
 
   <div id="taskarea" <?= $form['type'] === 'leave' ? 'hidden' : '' ?>>
     <?php if ($prefilled && $inWindow): ?><div class="routinebar routinebar--info">Your daily routine is already filled in. Change the hours, remove a row, or add extras, then submit.</div><?php endif; ?>
-    <?php if ($inWindow && $routine['extra']): ?>
-    <div class="routinebar" id="extras"><span class="routinebar__l">Add extra work</span>
+    <?php if ($ctPerson && $inWindow): ?><div class="routinebar routinebar--info"><?= $ctStat['calls'] > 0 ? 'Your calling for ' . h(fmt_date($date)) . ' is filled in from your sheet: <b>' . (int)$ctStat['calls'] . '</b> calls, <b>' . (int)$ctStat['picked'] . '</b> picked up, <b>' . (int)$ctStat['orders'] . '</b> orders. Add the hours, and use “Add other work” for anything else you did.' : 'No calls found in your calling sheet for ' . h(fmt_date($date)) . ' yet. It updates every 5 minutes. You can add your work below.' ?></div><?php endif; ?>
+    <?php if ($inWindow && ($routine['extra'] || $ctPerson)): ?>
+    <div class="routinebar" id="extras"><span class="routinebar__l">Add other work</span>
+      <?php if ($ctPerson) { foreach (['Other work (type what you did)', 'Order confirmation / WhatsApp follow-up', 'Packing / dispatch help', 'Data entry / sheet update', 'Team meeting / training'] as $k => $ot): ?><button type="button" class="rchip" data-extra data-title="<?= $k === 0 ? '' : h($ot) ?>" data-cat="<?= $k === 4 ? 'Meeting' : 'Other' ?>" data-hrs="">+ <?= h($ot) ?></button><?php endforeach; } ?>
       <?php foreach ($routine['extra'] as $r): ?><button type="button" class="rchip" data-extra data-title="<?= h($r['title']) ?>" data-cat="<?= h($r['category']) ?>" data-hrs="<?= (float)$r['hours'] > 0 ? h(fmt_hours((float)$r['hours'])) : '' ?>">+ <?= h($r['title']) ?></button><?php endforeach; ?>
     </div><?php endif; ?>
     <section class="sheet">

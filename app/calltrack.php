@@ -171,3 +171,33 @@ function ct_cur_sql(): string
            OR (c.cat = 'todo' AND NOT EXISTS (SELECT 1 FROM ct_call n WHERE n.person = c.person AND n.phone = c.phone AND n.cat != 'todo')
                AND NOT EXISTS (SELECT 1 FROM ct_call n WHERE n.person = c.person AND n.phone = c.phone AND n.cat = 'todo' AND (n.day > c.day OR (n.day = c.day AND n.rown > c.rown))))";
 }
+
+/** Which calling-tracker person (if any) is this login? Matches on the first word of the name, either direction. */
+function ct_person_for(array $u): string
+{
+    $w = mb_strtolower(trim(explode(' ', trim((string)($u['name'] ?? '')))[0] ?? ''));
+    if (mb_strlen($w) < 3) { return ''; }
+    foreach (CT_SHEETS as [$label]) {
+        $p = trim(preg_replace('/^Calling\s*[·\-:]\s*/u', '', $label));
+        $pl = mb_strtolower($p);
+        if ($pl === $w || strpos($pl, $w) === 0 || strpos($w, $pl) === 0) { return $p; }
+    }
+    return '';
+}
+
+/** What this caller actually did on a day, read from their sheet. */
+function ct_day_stats(string $person, string $day): array
+{
+    $st = db()->prepare("SELECT cat, COUNT(*) n FROM ct_call WHERE person = ? AND day = ? AND cat != 'todo' GROUP BY cat");
+    $st->execute([$person, $day]);
+    $c = array_fill_keys(array_keys(CT_CATS), 0);
+    foreach ($st->fetchAll() as $r) { $c[$r['cat']] = (int)$r['n']; }
+    $calls = array_sum($c);
+    return [
+        'calls' => $calls,
+        'picked' => $c['deal'] + $c['hot'] + $c['connected'] + $c['callback'] + $c['notint'],
+        'interested' => $c['deal'] + $c['hot'] + $c['connected'],
+        'orders' => $c['deal'],
+        'noans' => $c['noanswer'] + $c['off'] + $c['wrong'],
+    ];
+}
