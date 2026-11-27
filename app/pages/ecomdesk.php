@@ -139,7 +139,8 @@ layout_head('E-commerce desk');
 <form method="post" action="<?= h($self) ?>" class="card card--wide">
   <?= $csrf ?><input type="hidden" name="action" value="entry"><input type="hidden" name="day" value="<?= h($day) ?>">
   <div class="card__h"><h2>Type the day's numbers</h2>
-    <span class="inl"><label class="muted tiny" for="dsel">Day</label><input id="dsel" type="date" value="<?= h($day) ?>" max="<?= h($today) ?>" data-goto="<?= h(url('ecomdesk')) ?>&d="></span></div>
+  </div>
+  <?php ecom_day_bar('ecomdesk', $day, false); ?>
   <div class="tblwrap"><table class="tbl tbl--entry">
     <thead><tr><th>Platform</th><th class="r">Sales ₹</th><th class="r">Orders</th><th class="r">Ad spend ₹</th></tr></thead>
     <tbody>

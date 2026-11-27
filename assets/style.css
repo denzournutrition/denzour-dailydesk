@@ -455,3 +455,31 @@ details.card>summary{cursor:pointer;list-style:none}details.card>summary::-webki
 .rchip:hover{background:var(--prisoft);border-color:var(--pri)}
 
 .formrow .field select{min-width:150px}
+
+/* ---------- day bar (E-commerce) ---------- */
+.daybar{margin:-4px 0 18px}
+.daybar__top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.daybar__nav{width:44px;height:44px;border-radius:14px;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;color:var(--ink);text-decoration:none;box-shadow:0 1px 2px rgba(22,36,29,.05);transition:transform .15s,box-shadow .15s,border-color .15s}
+a.daybar__nav:hover{border-color:var(--pri);box-shadow:0 6px 16px rgba(47,111,85,.16);transform:translateY(-1px)}
+.daybar__nav.is-off{opacity:.35}
+.daybar__cur{position:relative;display:flex;align-items:center;gap:14px;padding:8px 22px 8px 10px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(135deg,#fff,var(--prisoft));box-shadow:0 1px 2px rgba(22,36,29,.05),0 8px 22px rgba(47,111,85,.10);cursor:pointer;min-width:240px}
+.daybar__cur:hover{border-color:var(--pri)}
+.daybar__cal{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--pri),var(--pri-2));color:#fff;display:grid;place-items:center;box-shadow:0 6px 14px rgba(47,111,85,.35)}
+.daybar__txt{display:grid;line-height:1.15}.daybar__txt small{font-size:.74rem;letter-spacing:.04em;text-transform:uppercase;color:var(--mute);font-weight:600}.daybar__txt b{font-size:1.32rem;font-weight:800;letter-spacing:-.02em}
+.daybar__in{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0}
+.daybar__in::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.daybar__sum{margin-left:auto;font-size:.8rem;font-weight:650;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mute)}
+.daybar__sum.is-ok{background:var(--oksoft);color:var(--ok);border-color:transparent}.daybar__sum.is-part{background:var(--warnsoft);color:var(--warn);border-color:transparent}.daybar__sum.is-none{background:var(--badsoft);color:var(--bad);border-color:transparent}
+.daybar__today{font-weight:650;font-size:.84rem;padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;text-decoration:none}
+.daystrip{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.daychip{flex:0 0 auto;scroll-snap-align:center;width:58px;display:grid;justify-items:center;gap:3px;padding:9px 0 10px;border-radius:16px;border:1px solid var(--line);background:var(--card);text-decoration:none;color:var(--ink);transition:transform .15s,box-shadow .15s,border-color .15s}
+.daychip small{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:650}.daychip b{font-size:1.18rem;font-weight:800;line-height:1.1}
+.daychip:hover{border-color:var(--pri);transform:translateY(-2px);box-shadow:0 8px 18px rgba(22,36,29,.09)}
+.daychip .dots{display:flex;gap:3px;margin-top:2px}.daychip .dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}.daychip .dots i.on{background:var(--ok)}
+.daychip.is-miss{border-color:#F2C9C4;background:#FFF8F7}.daychip.is-miss .dots i{background:#F2C9C4}
+.daychip.is-part .dots i.on{background:var(--warn)}
+.daychip.is-dim{opacity:.55}
+.daychip.is-on{background:linear-gradient(160deg,var(--pri),var(--pri-2));border-color:transparent;color:#fff;box-shadow:0 10px 22px rgba(47,111,85,.35)}
+.daychip.is-on small{color:rgba(255,255,255,.78)}.daychip.is-on .dots i{background:rgba(255,255,255,.35)}.daychip.is-on .dots i.on{background:#fff}
+.notup{color:var(--mute)}.notup span{display:inline-block;padding:4px 11px;border-radius:999px;background:var(--soft);font-weight:600;font-size:.84rem}.notup.is-low span{background:var(--badsoft);color:var(--bad)}.notup small{margin-left:10px;color:var(--mute);font-weight:500}
+@media(max-width:700px){.daybar__cur{order:-1;flex:1 0 100%;min-width:0}.daybar__txt b{font-size:1.12rem;white-space:nowrap}.daybar__sum{margin-left:auto}.daychip{width:52px}.notup span{font-size:.78rem;padding:3px 9px;white-space:nowrap}.notup small{display:block;margin:4px 0 0}}

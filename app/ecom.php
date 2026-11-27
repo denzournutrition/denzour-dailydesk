@@ -448,3 +448,36 @@ function ecom_chart(string $month, array $by): string
     }
     return $o . '</svg>';
 }
+
+/** Premium day bar: previous / next arrows, a big date that opens the calendar, a Today button and a 14-day strip showing which platforms have numbers. */
+function ecom_day_bar(string $page, string $day, bool $withMonth = true): void
+{
+    $today = today();
+    $end = min($today, add_days($day, 6)); $start = add_days($end, -13);
+    $rows = ecom_rows($start, $end);
+    $plats = array_keys(ecom_sheet_platforms()); $nP = count($plats);
+    $link = fn(string $d) => url($page, ($withMonth ? ['month' => substr($d, 0, 7)] : []) + ['d' => $d]);
+    $rel = $day === $today ? 'Today' : ($day === add_days($today, -1) ? 'Yesterday' : (int)((strtotime($today) - strtotime($day)) / 86400) . ' days ago');
+    $dt = new DateTime($day);
+    $prev = add_days($day, -1); $next = add_days($day, 1);
+    $got = isset($rows[$day]) ? count(array_intersect($plats, array_keys($rows[$day]))) : 0;
+    echo '<div class="daybar"><div class="daybar__top">';
+    echo '<a class="daybar__nav" href="' . h($link($prev)) . '" aria-label="Previous day">' . icon('chev-l') . '</a>';
+    echo '<label class="daybar__cur"><span class="daybar__cal">' . icon('calendar') . '</span><span class="daybar__txt"><small>' . h($dt->format('l')) . ' · ' . h($rel) . '</small><b>' . h($dt->format('j F Y')) . '</b></span>'
+        . '<input class="daybar__in" type="date" value="' . h($day) . '" max="' . h($today) . '" aria-label="Pick a day" data-goto="' . h(url($page, ($withMonth ? ['month' => substr($day, 0, 7)] : []))) . '&amp;d="></label>';
+    if ($day < $today) { echo '<a class="daybar__nav" href="' . h($link($next)) . '" aria-label="Next day">' . icon('chev-r') . '</a>'; }
+    else { echo '<span class="daybar__nav is-off" aria-hidden="true">' . icon('chev-r') . '</span>'; }
+    echo '<span class="daybar__sum ' . ($got === $nP ? 'is-ok' : ($got ? 'is-part' : 'is-none')) . '">' . $got . ' of ' . $nP . ' platforms updated</span>';
+    if ($day !== $today) { echo '<a class="daybar__today" href="' . h($link($today)) . '">Today</a>'; }
+    echo '</div><div class="daystrip" role="list">';
+    for ($d = $start; $d <= $end; $d = add_days($d, 1)) {
+        $n = isset($rows[$d]) ? count(array_intersect($plats, array_keys($rows[$d]))) : 0;
+        $wd = is_working_day($d);
+        $cls = 'daychip' . ($d === $day ? ' is-on' : '') . (!$wd && !$n ? ' is-dim' : '') . ($n === $nP ? ' is-full' : ($n ? ' is-part' : ($wd && $d < $today ? ' is-miss' : '')));
+        $x = new DateTime($d);
+        echo '<a class="' . $cls . '" role="listitem" href="' . h($link($d)) . '" title="' . h($x->format('D, j M')) . ': ' . $n . ' of ' . $nP . ' platforms"' . ($d === $day ? ' aria-current="date"' : '') . '><small>' . h($x->format('D')) . '</small><b>' . h($x->format('j')) . '</b><span class="dots">';
+        foreach ($plats as $k) { echo '<i class="' . (isset($rows[$d][$k]) ? 'on' : '') . '"></i>'; }
+        echo '</span></a>';
+    }
+    echo '</div></div>';
+}

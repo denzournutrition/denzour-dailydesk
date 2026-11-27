@@ -74,14 +74,13 @@ layout_head('E-commerce');
 </section>
 
 <section class="card" aria-label="Day detail">
-  <div class="card__h"><h2><?= h(fmt_date($day, true)) ?></h2>
-    <span class="inl"><label class="muted tiny" for="dsel">Day</label><input id="dsel" type="date" value="<?= h($day) ?>" max="<?= h($today) ?>" data-goto="<?= h(url('ecomdash', ['month' => substr($day, 0, 7)])) ?>&d="></span></div>
+  <?php ecom_day_bar('ecomdash', $day); ?>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Platform</th><th class="r">Sales</th><th class="r">Orders</th><th class="r">Ad spend</th><th class="r">ROAS</th><th class="r hm">vs day before</th><th class="hm">Updated by</th></tr></thead>
     <tbody>
     <?php foreach (ecom_sheet_platforms() as $k => $p): $r = $dayRows[$k] ?? null; $pr = $prev[$k] ?? null; ?>
       <tr><td><span class="pcell"><?= ecom_logo($k, 30) ?><strong><?= h($p[0]) ?></strong></span></td>
-        <?php if (!$r): ?><td colspan="4" class="muted <?= is_working_day($day) && $day < $today ? 'is-low' : '' ?>">Not updated</td><td class="hm"></td><td class="hm"></td>
+        <?php if (!$r): ?><td colspan="4" class="notup <?= is_working_day($day) && $day < $today ? 'is-low' : '' ?>"><span>Not in the sheet yet</span><small><?= !empty($plat[$k]['last']) ? 'last entry ' . h(fmt_short($plat[$k]['last'])) : 'no entry this month' ?></small></td><td class="hm"></td><td class="hm"></td>
         <?php else: $dl = $pr && $pr['sales'] > 0 ? round(($r['sales'] - $pr['sales']) / $pr['sales'] * 100) : null; ?>
           <td class="r"><?= h(inr($r['sales'])) ?></td><td class="r"><?= (int)$r['orders'] ?: '–' ?></td><td class="r"><?= h(inr($r['spend'])) ?></td><td class="r"><?= h(ecom_roas((float)$r['sales'], (float)$r['spend'])) ?></td>
           <td class="r hm <?= $dl !== null && $dl < 0 ? 'is-low' : '' ?>"><?= $dl === null ? '–' : ($dl > 0 ? '+' : '') . $dl . '%' ?></td>

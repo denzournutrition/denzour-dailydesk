@@ -20,6 +20,12 @@
     el.addEventListener('change', function () { if (el.form) el.form.submit(); });
   });
 
+  // day strip: bring the chosen day into view
+  qa('.daystrip').forEach(function (s) {
+    var c = s.querySelector('.is-on');
+    if (c) { s.scrollLeft = Math.max(0, c.offsetLeft - (s.clientWidth - c.offsetWidth) / 2); }
+  });
+
   // date picker that opens another page
   qa('[data-goto]').forEach(function (el) {
     el.addEventListener('change', function () { if (el.value) { window.location.href = el.getAttribute('data-goto') + encodeURIComponent(el.value); } });
