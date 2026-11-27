@@ -127,9 +127,9 @@ function gsync_run_due(): int
 {
     $n = 0;
     $now = time();
-    foreach (db()->query('SELECT id, every_min, last_run FROM gsync_links WHERE enabled = 1')->fetchAll() as $l) {
+    foreach (db()->query('SELECT id, every_min, last_run FROM gsync_links WHERE enabled = 1 ORDER BY last_run ASC, id ASC')->fetchAll() as $l) {   // longest-waiting first, so the first links cannot starve the rest
         $due = $l['last_run'] === '' || $now - strtotime($l['last_run']) >= max(5, (int)$l['every_min']) * 60;
-        if ($due) { gsync_run((int)$l['id']); $n++; if ($n >= 3) { break; } }
+        if ($due) { gsync_run((int)$l['id']); $n++; if ($n >= 4) { break; } }
     }
     $n += conn_run_due();
     return $n;

@@ -111,6 +111,7 @@ function offline_import(string $path, string $stream = 'offline'): array
         }
         $g = fn($k) => isset($hdr[$k], $r[$hdr[$k]]) ? trim((string)$r[$hdr[$k]]) : '';
         $day = offline_date($g('date')); $tot = $num($g('total'));
+        if ($day === '' && $tot <= 0 && $g('customer') === '' && $g('no') === '') { continue; }   // a blank row at the bottom of the sheet
         if ($day === '' || $tot <= 0) { $skipped++; if (count($skipWhy) < 3) { $skipWhy[] = ($day === '' ? 'date "' . mb_substr($g('date'), 0, 20) . '"' : 'total ' . $g('total')) . ' (' . mb_substr($g('no'), 0, 20) . ')'; } continue; }
         $adv = isset($hdr['advance']) ? $num($g('advance')) : (isset($hdr['balance']) ? max(0.0, $tot - $num($g('balance'))) : 0.0);
         $adv = min($adv, $tot);
