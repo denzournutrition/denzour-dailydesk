@@ -9,6 +9,8 @@ const CT_SHEETS = [
     ['Calling · Tanya', '1MvFGU0i285f5OwzGThTEjUzamdS6BEEYCOz99I8RLG0'],
     ['Calling · Bivakar', '1uVVu4opLeOXHmWqbZdsTlQEuNDcbxtlCC1QjYNCUlng'],
     ['Calling · Shabik', '1paw9JX2ByTiU3GfYVdtlgPUKNiWiYMIPRcYB8behjnU'],
+    ['Calling · Shajadi', '1z9Ok3W-sv4-vhK6AhNl3trezKqWe8N4Yo_MmYFSkSq0'],
+    ['Calling · Ankit', '1W0_gP50x1Af5-_2TuR28TVjdvyPHrPl5GaGesJzEHHA'],
 ];
 
 const CT_CATS = [
@@ -23,7 +25,7 @@ function ct_migrate(PDO $pdo): void
         city TEXT NOT NULL DEFAULT '', cat TEXT NOT NULL DEFAULT 'todo', disp TEXT NOT NULL DEFAULT '', remark TEXT NOT NULL DEFAULT '', due TEXT NOT NULL DEFAULT '', hint TEXT NOT NULL DEFAULT '')");
     $pdo->exec('CREATE INDEX IF NOT EXISTS ct_call_p ON ct_call (person, phone)');
     try {
-        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_call_sheets'")->fetchColumn()) {
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_call_sheets_v2'")->fetchColumn()) {
             foreach (CT_SHEETS as [$label, $id]) {
                 $has = $pdo->prepare('SELECT 1 FROM gsync_links WHERE sheet_id = ?'); $has->execute([$id]);
                 if (!$has->fetchColumn()) {
@@ -31,7 +33,7 @@ function ct_migrate(PDO $pdo): void
                         ->execute([$label, 'calltrack', 0, $id, 'https://docs.google.com/spreadsheets/d/' . $id . '/edit', 5, date('Y-m-d H:i:s'), '']);
                 }
             }
-            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_call_sheets', '1')");
+            $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('seed_call_sheets_v2', '1')");
         }
     } catch (Throwable $e) { /* never block start-up */ }
 }
@@ -76,7 +78,7 @@ function ct_cat(string $t): string
     if (preg_match('/not\s+int|deal with other|other brand/', $t)) { return 'notint'; }
     if (str_contains($t, '100%')) { return 'deal'; }
     if (preg_match('/50%|interest|interstead|follow-?\s?up required/', $t)) { return 'hot'; }
-    if (str_contains($t, 'connected')) { return 'connected'; }
+    if (str_contains($t, 'connected') || preg_match('/^share details/', $t)) { return 'connected'; }
     if (preg_match('/call\s*back|callback/', $t)) { return 'callback'; }
     if (str_contains($t, 'wrong number')) { return 'wrong'; }
     if (preg_match('/switched off|not reachable|unreachable/', $t)) { return 'off'; }

@@ -29,11 +29,11 @@ $latest = ''; foreach ($meta as $m) { if ($m['last_ok'] && $m['last_run'] > $lat
 layout_head('Calling tracker');
 ?>
 <div class="pagehead">
-  <div><h1>Calling tracker</h1><p class="muted">Offline team daily calls: Tanya, Bivakar and Shabik<?= $latest !== '' ? ' · sheets read ' . h(fmt_date(substr($latest, 0, 10))) . ' ' . h(substr($latest, 11, 5)) : '' ?></p></div>
+  <div><h1>Calling tracker</h1><p class="muted">Offline team daily calls: Tanya, Bivakar, Shabik, Shajadi and Ankit<?= $latest !== '' ? ' · sheets read ' . h(fmt_date(substr($latest, 0, 10))) . ' ' . h(substr($latest, 11, 5)) : '' ?></p></div>
   <div class="pagehead__r"><?php foreach (array_merge(['all'], $people) as $pp): ?><a class="btn btn--sm <?= $pp === $who ? '' : 'btn--ghost' ?>" href="<?= h(url('calldash', ['t' => $tabNow, 'who' => $pp])) ?>"><?= $pp === 'all' ? 'Whole team' : h($pp) ?></a> <?php endforeach; ?></div>
 </div>
 <?php if (!$people): ?>
-<section class="card"><p class="muted">No calls read yet. The three calling sheets are linked under Admin, Google Sheets ("Calling · Tanya", "Calling · Bivakar", "Calling · Shabik") and are read every 5 minutes. Press Sync now there to read them immediately. Each sheet must be shared as "Anyone with the link: Viewer".</p>
+<section class="card"><p class="muted">No calls read yet. The calling sheets are linked under Admin, Google Sheets ("Calling · Tanya", "Calling · Bivakar", "Calling · Shabik" and so on) and are read every 5 minutes. Press Sync now there to read them immediately. Each sheet must be shared as "Anyone with the link: Viewer".</p>
 <?php foreach ($meta as $m): if (!$m['last_ok'] && $m['last_msg'] !== ''): ?><p class="tiny"><?= h($m['label']) ?>: <?= h($m['last_msg']) ?></p><?php endif; endforeach; ?></section>
 <?php layout_foot(); return; endif;
 foreach ($meta as $m): if (!$m['last_ok'] && $m['last_msg'] !== ''): ?><p class="tiny" style="color:var(--bad,#c0392b)"><?= h($m['label']) ?>: <?= h($m['last_msg']) ?></p><?php endif; endforeach;
