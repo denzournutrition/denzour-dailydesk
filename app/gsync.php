@@ -89,6 +89,8 @@ function gsync_run(int $id): string
             $msg = track_import($tmp, $month);
         } elseif ($l['kind'] === 'offline') {
             $x = offline_import_xlsx($tmp, 'offline'); $msg = 'Read ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ' (' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . ').' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows: ' . implode(', ', $x['why']) . '.' : ''); set_setting('off_sync_note', date('Y-m-d H:i') . ' ' . $msg);
+        } elseif ($l['kind'] === 'calltrack') {
+            $msg = ct_import($tmp, trim(preg_replace('/^Calling\s*[·\-:]\s*/u', '', (string)$l['label'])) ?: 'Caller');
         } elseif ($l['kind'] === 'inf') {
             $msg = inf_import($tmp);
         } elseif ($l['kind'] === 'b2b') {
