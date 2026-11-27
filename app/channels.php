@@ -69,10 +69,15 @@ function offline_channel_id(string $stream = 'offline'): int
 function offline_date(string $v): string
 {
     $v = trim($v);
-    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $v, $m)) { return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? "$m[1]-$m[2]-$m[3]" : ''; }
-    foreach (['d/m/Y', 'd-m-Y', 'd/m/y', 'd-m-y', 'j M Y', 'j-M-Y', 'd.m.Y'] as $f) {
+    if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})/', $v, $m)) { return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]) : ''; }
+    if (preg_match('/^(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{2}|\d{4})(?!\d)/', $v, $m)) {   // 5/11/2026, 05-11-26, 26.11.2026 14:30 (day first, as in India)
+        $y = (int)$m[3]; if ($y < 100) { $y += 2000; }
+        if (checkdate((int)$m[2], (int)$m[1], $y)) { return sprintf('%04d-%02d-%02d', $y, $m[2], $m[1]); }
+        return '';
+    }
+    foreach (['j M Y', 'j-M-Y', 'j F Y', 'j-M-y'] as $f) {
         $d = DateTime::createFromFormat($f, $v);
-        if ($d && $d->format($f) === $v) { return $d->format('Y-m-d'); }
+        if ($d) { return $d->format('Y-m-d'); }
     }
     return '';
 }
@@ -93,7 +98,7 @@ function offline_import(string $path, string $stream = 'offline'): array
         'total' => ['total', 'amount', 'sale', 'saleamount', 'billamount', 'invoicevalue', 'invoiceamount', 'creditamount', 'totalamount'],
         'advance' => ['advance', 'received', 'paid', 'collected', 'paidamount', 'receivedamount', 'advancereceived'],
         'balance' => ['balance', 'due', 'outstanding', 'pending', 'balanceamount', 'dueamount', 'pendingamount']];
-    $hdr = null; $rows = []; $skipped = 0; $seq = 0;
+    $hdr = null; $rows = []; $skipped = 0; $seq = 0; $skipWhy = [];
     $num = fn($v) => round((float)str_replace([',', '₹', ' '], '', (string)$v), 2);
     while (($r = fgetcsv($fh, 0, ',', '"', '')) !== false) {
         if ($hdr === null) {
@@ -106,7 +111,7 @@ function offline_import(string $path, string $stream = 'offline'): array
         }
         $g = fn($k) => isset($hdr[$k], $r[$hdr[$k]]) ? trim((string)$r[$hdr[$k]]) : '';
         $day = offline_date($g('date')); $tot = $num($g('total'));
-        if ($day === '' || $tot <= 0) { $skipped++; continue; }
+        if ($day === '' || $tot <= 0) { $skipped++; if (count($skipWhy) < 3) { $skipWhy[] = ($day === '' ? 'date "' . mb_substr($g('date'), 0, 20) . '"' : 'total ' . $g('total')) . ' (' . mb_substr($g('no'), 0, 20) . ')'; } continue; }
         $adv = isset($hdr['advance']) ? $num($g('advance')) : (isset($hdr['balance']) ? max(0.0, $tot - $num($g('balance'))) : 0.0);
         $adv = min($adv, $tot);
         $no = $g('no'); if ($no === '') { $no = 'AUTO-' . substr(md5($day . '|' . $g('customer') . '|' . $tot . '|' . (++$seq)), 0, 8); }
@@ -129,7 +134,7 @@ function offline_import(string $path, string $stream = 'offline'): array
             ->execute([$cid, date('Y-m-d H:i:s'), $stream, $from, $to]);
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
-    return ['rows' => count($rows), 'from' => $from, 'to' => $to, 'sales' => array_sum(array_column($rows, 7)), 'skipped' => $skipped];
+    return ['rows' => count($rows), 'from' => $from, 'to' => $to, 'sales' => array_sum(array_column($rows, 7)), 'skipped' => $skipped, 'why' => $skipWhy];
 }
 
 /** All invoices of a stream between two dates. */

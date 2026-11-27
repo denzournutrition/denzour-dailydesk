@@ -74,6 +74,7 @@ layout_head($title . ' dashboard');
   <div class="pagehead__r"><?= $tab('offline', 'Offline') ?> <?= $tab('bhanu', 'Bhanu credit offline') ?> <?= period_bar('offlinedash', $P, $bh ? ['v' => 'bhanu'] : []) ?></div>
 </div>
 
+<?php if (!$bh && ($sn = setting('off_sync_note')) !== ''): ?><p class="muted tiny" style="margin:-6px 0 10px">Google sheet: <?= h(substr($sn, 0, 16)) ?> · <?= h(substr($sn, 17)) ?></p><?php endif; ?>
 <?php if ($bh && $hasB2b): ?><div class="pagehead__r" style="margin:-4px 0 14px;flex-wrap:wrap"><?php foreach (['overview' => 'Overview', 'reminders' => 'Reminders', 'distributors' => 'Distributors', 'followups' => 'Follow-ups', 'legal' => 'Legal and blocked', 'pipeline' => 'Pipeline', 'invoices' => 'Invoices (CSV)'] as $tk => $tl): ?><a class="btn btn--sm <?= $tk === 'invoices' ? '' : 'btn--ghost' ?>" href="<?= h(url('offlinedash', ['v' => 'bhanu', 't' => $tk])) ?>"><?= h($tl) ?></a> <?php endforeach; ?></div><?php endif; ?>
 <?php if (!$rows): ?>
 <section class="card"><p class="muted">No <?= h($title) ?> invoices in this period.<?= $bh ? ' Until you upload Bhanu\'s file, his figure comes from the main sale sheet.' : '' ?></p></section>

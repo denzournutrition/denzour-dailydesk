@@ -88,7 +88,7 @@ function gsync_run(int $id): string
             $month = preg_match('/^\d{4}-\d{2}$/', (string)($l['month'] ?? '')) ? (string)$l['month'] : substr(today(), 0, 7);
             $msg = track_import($tmp, $month);
         } elseif ($l['kind'] === 'offline') {
-            $x = offline_import_xlsx($tmp, 'offline'); $msg = 'Read ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ' (' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . ').';
+            $x = offline_import_xlsx($tmp, 'offline'); $msg = 'Read ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ' (' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . ').' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows: ' . implode(', ', $x['why']) . '.' : ''); set_setting('off_sync_note', date('Y-m-d H:i') . ' ' . $msg);
         } elseif ($l['kind'] === 'inf') {
             $msg = inf_import($tmp);
         } elseif ($l['kind'] === 'b2b') {
