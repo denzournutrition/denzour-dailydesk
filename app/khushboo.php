@@ -99,7 +99,7 @@ function kb_import_conf(string $path): string
     $pdo = db(); $mon = ['jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12];
     $minYm = date('Y-m', strtotime(today() . '-01 -14 months'));
     $pdo->beginTransaction();
-    $n = 0; $months = 0;
+    $n = 0; $months = 0; $probe = '';
     $ins = $pdo->prepare('INSERT INTO kb_conf (ym, day, oid, conf, status, sc, courier, pay, amt, reason) VALUES (?,?,?,?,?,?,?,?,?,?)');
     foreach ($tabs as $t) {
         if (!preg_match('/^\s*([A-Za-z]{3})[a-z]*[\s\-\']*(\d{2})\b/', (string)$t['name'], $x) || !isset($mon[strtolower($x[1])])) { continue; }
@@ -117,6 +117,7 @@ function kb_import_conf(string $path): string
             $oid = kb_s($r[$c['oid']] ?? '');
             if (!preg_match('/\d{3,}/', $oid)) { continue; }
             $dv = $r[$c['date']] ?? ''; $day = 0;
+            if ($probe === '' && $ym === date('Y-m')) { $probe = gettype($dv) . ':' . (is_scalar($dv) ? (string)$dv : '?'); }
             if (is_float($dv) || is_int($dv)) { $day = $dv > 30000 ? (int)gmdate('j', (int)(($dv - 25569) * 86400)) : (int)$dv; }
             elseif (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})/', (string)$dv, $dm)) {
                 $a = (int)$dm[1]; $b = (int)$dm[3]; $mo = (int)substr($ym, 5, 2);
@@ -130,7 +131,7 @@ function kb_import_conf(string $path): string
         }
     }
     $pdo->commit();
-    return 'Read ' . $n . ' confirmed orders across ' . $months . ' months.';
+    return 'Read ' . $n . ' confirmed orders across ' . $months . ' months.' . ($probe !== '' ? ' First date cell: ' . $probe . '.' : '');
 }
 
 function kb_import_det(string $path): string
