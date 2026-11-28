@@ -19,6 +19,7 @@ require __DIR__ . '/inf.php';
 require __DIR__ . '/calltrack.php';
 require __DIR__ . '/khushboo.php';
 require __DIR__ . '/adupload.php';
+require __DIR__ . '/perf.php';
 
 function cfg(string $k, $d = null)
 {
@@ -162,6 +163,7 @@ function migrate(PDO $pdo): void
     inf_migrate($pdo);
     ct_migrate($pdo);
     kb_migrate($pdo);
+    perf_migrate($pdo);
     att_migrate($pdo);
 }
 
@@ -418,7 +420,7 @@ function layout_head(string $title, string $bodyClass = ''): void
         if (can_ecom_desk($u)) {
             $desks[] = ['ecomdesk', 'E-commerce desk', 'bag'];
         }
-        if (!can_view_dashboard($u) && conn_can($u, 'ads')) { $desks[] = ['ads', 'Ads and creatives', 'trend']; }
+        if (!can_view_dashboard($u) && conn_can($u, 'ads')) { $desks[] = ['perfdash', 'Performance', 'trend']; $desks[] = ['ads', 'Ads and creatives', 'trend']; }
         if (!can_view_dashboard($u) && conn_can($u, 'social')) { $desks[] = ['social', 'Instagram', 'users']; }
         $boards = [];
         if (can_view_dashboard($u)) {
@@ -430,6 +432,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $boards[] = ['calldash', 'Calling tracker', 'users'];
             $boards[] = ['kbdash', 'Order desk', 'bag'];
             $boards[] = ['infdash', 'Influencers', 'users'];
+            $boards[] = ['perfdash', 'Performance', 'trend'];
             $boards[] = ['ads', 'Ads and creatives', 'trend'];
             $boards[] = ['social', 'Instagram', 'users'];
             $boards[] = ['attboard', 'Attendance', 'check'];
