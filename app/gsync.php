@@ -157,6 +157,7 @@ function gsync_auto(): void
     register_shutdown_function(function () {
         if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); } elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
         try { gsync_run_due(); } catch (Throwable $e) { /* never break a page */ }
+        try { autodeploy_run(); } catch (Throwable $e) { /* never break a page */ }
     });
 }
 

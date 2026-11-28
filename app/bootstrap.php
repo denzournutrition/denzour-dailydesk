@@ -20,6 +20,7 @@ require __DIR__ . '/calltrack.php';
 require __DIR__ . '/khushboo.php';
 require __DIR__ . '/adupload.php';
 require __DIR__ . '/perf.php';
+require __DIR__ . '/autodeploy.php';
 require __DIR__ . '/charts.php';
 
 function cfg(string $k, $d = null)
