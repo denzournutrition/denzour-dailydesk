@@ -45,8 +45,16 @@ function kb_date($v): string
 {
     $d = 0; $m = 0; $y = 0;
     if (is_float($v) || is_int($v)) {
-        if ($v > 30000 && $v < 80000) { return gmdate('Y-m-d', (int)(($v - 25569) * 86400)); }
-        return '';
+        if (!($v > 30000 && $v < 80000)) { return ''; }
+        $ts = (int)(($v - 25569) * 86400); $a = gmdate('Y-m-d', $ts);
+        // The sheets were typed as D-M-YY but Google read many of them as M-D-YY, so 1-11-26 is stored as 11 Jan. When both readings are real dates, the one closest to today (not in the future) is the right one.
+        $M = (int)gmdate('n', $ts); $D = (int)gmdate('j', $ts); $Y = (int)gmdate('Y', $ts);
+        if ($D <= 12 && $M !== $D) {
+            $b = sprintf('%04d-%02d-%02d', $Y, $D, $M); $lim = date('Y-m-d', strtotime(today() . ' +2 days'));
+            $okA = $a <= $lim; $okB = $b <= $lim;
+            if ($okB && (!$okA || abs(strtotime(today()) - strtotime($b)) < abs(strtotime(today()) - strtotime($a)))) { return $b; }
+        }
+        return $a;
     }
     $s = trim((string)$v);
     if ($s === '') { return ''; }
@@ -118,7 +126,12 @@ function kb_import_conf(string $path): string
             if (!preg_match('/\d{3,}/', $oid)) { continue; }
             $dv = $r[$c['date']] ?? ''; $day = 0;
             if ($probe === '' && $ym === date('Y-m')) { $probe = gettype($dv) . ':' . (is_scalar($dv) ? (string)$dv : '?'); }
-            if (is_float($dv) || is_int($dv)) { $day = $dv > 30000 ? (int)gmdate('j', (int)(($dv - 25569) * 86400)) : (int)$dv; }
+            if (is_float($dv) || is_int($dv)) {
+                if ($dv > 30000) {
+                    $ts = (int)(($dv - 25569) * 86400); $M = (int)gmdate('n', $ts); $D = (int)gmdate('j', $ts); $mo = (int)substr($ym, 5, 2);
+                    $day = ($D === $mo && $M !== $mo) ? $M : $D; // typed D-M-YY read as M-D-YY: 1-11-26 is stored as 11 Jan
+                } else { $day = (int)$dv; }
+            }
             elseif (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})/', (string)$dv, $dm)) {
                 $a = (int)$dm[1]; $b = (int)$dm[3]; $mo = (int)substr($ym, 5, 2);
                 if ($a === $mo && $b !== $mo) { $day = $b; } elseif ($b === $mo) { $day = $a; } else { $day = $dm[2] === '/' ? $b : $a; }
