@@ -18,6 +18,7 @@ require __DIR__ . '/b2b.php';
 require __DIR__ . '/inf.php';
 require __DIR__ . '/calltrack.php';
 require __DIR__ . '/khushboo.php';
+require __DIR__ . '/adupload.php';
 
 function cfg(string $k, $d = null)
 {
