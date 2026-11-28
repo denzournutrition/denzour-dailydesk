@@ -91,6 +91,10 @@ function gsync_run(int $id): string
             $x = offline_import_xlsx($tmp, 'offline'); $msg = 'Read ' . $x['rows'] . ' invoices, ' . inr($x['sales']) . ' (' . fmt_date($x['from']) . ' to ' . fmt_date($x['to']) . ').' . ($x['skipped'] ? ' Skipped ' . $x['skipped'] . ' rows: ' . implode(', ', $x['why']) . '.' : ''); set_setting('off_sync_note', date('Y-m-d H:i') . ' ' . $msg);
         } elseif ($l['kind'] === 'calltrack') {
             $msg = ct_import($tmp, trim(preg_replace('/^Calling\s*[·\-:]\s*/u', '', (string)$l['label'])) ?: 'Caller');
+        } elseif ($l['kind'] === 'kbconf') {
+            $msg = kb_import_conf($tmp);
+        } elseif ($l['kind'] === 'kbdet') {
+            $msg = kb_import_det($tmp);
         } elseif ($l['kind'] === 'inf') {
             $msg = inf_import($tmp);
         } elseif ($l['kind'] === 'b2b') {

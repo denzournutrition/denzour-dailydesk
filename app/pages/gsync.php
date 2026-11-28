@@ -58,7 +58,7 @@ layout_head('Google Sheets');
     <?php foreach ($links as $l): ?>
       <tr class="<?= $l['enabled'] ? '' : 'is-dim' ?>">
         <td><strong><?= h($l['label'] !== '' ? $l['label'] : 'Google Sheet') ?></strong><?= $l['who'] ? '<br><span class="muted tiny">' . h($l['who']) . '</span>' : '' ?></td>
-        <td class="tiny"><?= $l['kind'] === 'ecom' ? 'E-commerce' : ($l['kind'] === 'targets' ? 'Targets' : 'Sales') ?></td>
+        <td class="tiny"><?= h(['ecom' => 'E-commerce', 'targets' => 'Targets', 'offline' => 'Offline', 'b2b' => 'B2B', 'inf' => 'Influencers', 'calltrack' => 'Calling', 'kbconf' => 'Khushboo orders', 'kbdet' => 'Khushboo details'][$l['kind']] ?? 'Sales') ?></td>
         <td class="tiny"><?= (int)$l['every_min'] ?> min</td>
         <td class="tiny"><?= $l['last_run'] !== '' ? h(date('d M, g:i a', strtotime($l['last_run']))) : 'Not yet' ?></td>
         <td class="tiny"><?= $l['last_run'] === '' ? '' : ($l['last_ok'] ? '<span class="chip chip--ok">OK</span> ' : '<span class="chip chip--warn">Problem</span> ') ?><?= h($l['last_msg']) ?></td>

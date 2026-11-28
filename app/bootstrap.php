@@ -17,6 +17,7 @@ require __DIR__ . '/channels.php';
 require __DIR__ . '/b2b.php';
 require __DIR__ . '/inf.php';
 require __DIR__ . '/calltrack.php';
+require __DIR__ . '/khushboo.php';
 
 function cfg(string $k, $d = null)
 {
@@ -159,6 +160,7 @@ function migrate(PDO $pdo): void
     b2b_migrate($pdo);
     inf_migrate($pdo);
     ct_migrate($pdo);
+    kb_migrate($pdo);
     att_migrate($pdo);
 }
 
@@ -425,6 +427,7 @@ function layout_head(string $title, string $bodyClass = ''): void
             $boards[] = ['ecomdash', 'E-commerce', 'bag'];
             $boards[] = ['offlinedash', 'Offline', 'users'];
             $boards[] = ['calldash', 'Calling tracker', 'users'];
+            $boards[] = ['kbdash', 'Khushboo order desk', 'bag'];
             $boards[] = ['infdash', 'Influencers', 'users'];
             $boards[] = ['ads', 'Ads and creatives', 'trend'];
             $boards[] = ['social', 'Instagram', 'users'];
