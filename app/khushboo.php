@@ -55,9 +55,10 @@ function kb_date($v): string
         $d = (int)$x[1]; $m = $mon[strtolower($x[2])]; $y = (int)($x[3] ?? 0);
     } elseif (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})/', $s, $x)) {
         $y = (int)$x[1]; $m = (int)$x[2]; $d = (int)$x[3];
-    } elseif (preg_match('/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/', $s, $x)) {
-        $a = (int)$x[1]; $b = (int)$x[2]; $y = (int)($x[3] ?? 0);
-        if ($b > 12 && $a <= 12) { $m = $a; $d = $b; } else { $d = $a; $m = $b; }
+    } elseif (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})(?:[\/\-.](\d{2,4}))?/', $s, $x)) {
+        $a = (int)$x[1]; $b = (int)$x[3]; $y = (int)($x[4] ?? 0);
+        // Google's xlsx export writes date cells as M/D/YY; typed text uses D-M-YY
+        if ($b > 12 && $a <= 12) { $m = $a; $d = $b; } elseif ($a > 12) { $d = $a; $m = $b; } elseif ($x[2] === '/') { $m = $a; $d = $b; } else { $d = $a; $m = $b; }
     } else { return ''; }
     if ($m < 1 || $m > 12 || $d < 1 || $d > 31) { return ''; }
     if ($y > 0 && $y < 100) { $y += 2000; }
@@ -117,7 +118,10 @@ function kb_import_conf(string $path): string
             if (!preg_match('/\d{3,}/', $oid)) { continue; }
             $dv = $r[$c['date']] ?? ''; $day = 0;
             if (is_float($dv) || is_int($dv)) { $day = $dv > 30000 ? (int)gmdate('j', (int)(($dv - 25569) * 86400)) : (int)$dv; }
-            elseif (preg_match('/\d{1,2}/', (string)$dv, $dm)) { $day = (int)$dm[0]; }
+            elseif (preg_match('/^(\d{1,2})([\/\-.])(\d{1,2})/', (string)$dv, $dm)) {
+                $a = (int)$dm[1]; $b = (int)$dm[3]; $mo = (int)substr($ym, 5, 2);
+                if ($a === $mo && $b !== $mo) { $day = $b; } elseif ($b === $mo) { $day = $a; } else { $day = $dm[2] === '/' ? $b : $a; }
+            } elseif (preg_match('/\d{1,2}/', (string)$dv, $dm)) { $day = (int)$dm[0]; }
             if ($day < 1 || $day > $dim) { $day = 0; }
             $st = kb_s($r[$c['st']] ?? '');
             $reason = kb_s($r[$c['rc']] ?? '') ?: kb_s($r[$c['rr']] ?? '');
