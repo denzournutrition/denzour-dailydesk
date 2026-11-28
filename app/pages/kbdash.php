@@ -24,7 +24,7 @@ $M = $sum($ym); $P = $sum($prev);
 $meta = $q("SELECT label, kind, last_run, last_ok, last_msg FROM gsync_links WHERE kind IN ('kbconf','kbdet') ORDER BY id");
 $latest = ''; foreach ($meta as $m) { if ($m['last_ok'] && $m['last_run'] > $latest) { $latest = $m['last_run']; } }
 
-layout_head('Khushboo');
+layout_head('Order desk');
 ?>
 <div class="pagehead">
   <div><h1>Khushboo · Order desk</h1><p class="muted">Orders she confirms and dispatches, her offline and online sale, B2B COD and samples<?= $latest !== '' ? ' · sheets read ' . h(fmt_date(substr($latest, 0, 10))) . ' ' . h(substr($latest, 11, 5)) : '' ?></p></div>
