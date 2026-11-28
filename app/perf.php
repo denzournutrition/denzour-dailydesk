@@ -16,6 +16,7 @@ function perf_migrate(PDO $pdo): void
         g_impr REAL NOT NULL DEFAULT 0, g_orders REAL NOT NULL DEFAULT 0, g_visits REAL NOT NULL DEFAULT 0,
         PRIMARY KEY (ym, day))");
     try {
+        if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'perf_clean_v1'")->fetchColumn()) { $pdo->exec('DELETE FROM perf_daily'); $pdo->exec("INSERT OR REPLACE INTO settings (k, v) VALUES ('perf_clean_v1', '1')"); }
         if (!$pdo->query("SELECT 1 FROM settings WHERE k = 'seed_perf_v1'")->fetchColumn()) {
             foreach (PERF_SHEETS as [$label, $id, $kind]) {
                 $has = $pdo->prepare('SELECT 1 FROM gsync_links WHERE sheet_id = ? AND kind = ?'); $has->execute([$id, $kind]);
@@ -43,7 +44,7 @@ function perf_import(string $path, string $linkMonth = ''): string
     $tabs = xlsx_read($path); $done = [];
     foreach ($tabs as $t) {
         $rows = $t['rows']; $hi = null; $ti = null;
-        foreach (array_slice($rows, 0, 80, true) as $i => $r) {
+        foreach (array_slice($rows, 0, 400, true) as $i => $r) {
             $h = array_map(fn($c) => ad_hdr((string)$c), $r);
             if ($hi === null && in_array('metaads', $h, true) && in_array('googleads', $h, true) && in_array('day', $h, true)) { $hi = $i; }
             if ($ti === null && in_array('date', $h, true) && in_array('totalsessions', $h, true)) { $ti = $i; }
