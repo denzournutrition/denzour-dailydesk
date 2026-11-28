@@ -22,6 +22,7 @@ $routes = [
     'gsync'     => ['file' => 'gsync',     'roles' => ['admin'],                  'auth' => true],
     'mysheet'   => ['file' => 'mysheet',   'roles' => ['employee', 'admin'],      'auth' => true],
     'gsynccron' => ['file' => 'gsynccron', 'roles' => null,                       'auth' => false],
+    'deployhook' => ['file' => 'deployhook', 'roles' => null,                     'auth' => false],
     'update'    => ['file' => 'update',    'roles' => ['admin'],                  'auth' => true],
     'ecomdesk'  => ['file' => 'ecomdesk',  'roles' => ['employee', 'admin'],      'auth' => true],
     'ecomdash'  => ['file' => 'ecomdash',  'roles' => null, 'cap' => 'dashboard', 'auth' => true],
@@ -55,7 +56,7 @@ if (!has_users()) {
     $p = 'install';
 }
 
-if (!in_array($p, ['avatar', 'ecomlogo', 'export', 'exports', 'gsynccron'], true) && extension_loaded('zlib') && !headers_sent()) {
+if (!in_array($p, ['avatar', 'ecomlogo', 'export', 'exports', 'gsynccron', 'deployhook'], true) && extension_loaded('zlib') && !headers_sent()) {
     @ini_set('zlib.output_compression', '1');   // pages are mostly tables: roughly 6x smaller over the wire
 }
 
