@@ -68,6 +68,13 @@ layout_head('E-commerce');
 <?php endforeach; ?>
 </div>
 
+<?php $inrf = fn($v) => inr((float)$v); $pp = []; foreach (ecom_sheet_platforms() as $k => $p0) { $pp[] = [$p0[0], (float)$plat[$k]['sales'], (float)$plat[$k]['spend'], $p0[1]]; } ?>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Sales by platform</h2></div><?= ch_donut(array_map(fn($r) => [$r[0], $r[1], $r[3]], $pp), inr_short((float)$tot['sales']), 'sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Ad spend by platform</h2></div><?= ch_donut(array_map(fn($r) => [$r[0], $r[2], $r[3]], $pp), inr_short((float)$tot['spend']), 'ad spend', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Return on ad spend</h2><span class="muted tiny">sales ÷ spend, by platform</span></div>
+    <?= ch_combo(array_column($pp, 0), [['name' => 'ROAS', 'values' => array_map(fn($r) => $r[2] > 0 ? round($r[1] / $r[2], 2) : 0, $pp), 'color' => CH_PAL[0]]], [], ['fmt' => fn($v) => number_format((float)$v, 2) . 'x', 'axis' => fn($v) => number_format($v, 1) . 'x', 'ref' => [1 => '1x', 3 => '3x'], 'h' => 190, 'every' => 1, 'label' => 'ROAS by platform']) ?></section>
+</div>
 <section class="card" aria-label="Daily sales and spend chart">
   <div class="card__h"><h2>Every day</h2><span class="legend"><i class="lgd lgd--bar"></i>Sales <i class="lgd lgd--spend"></i>Ad spend</span></div>
   <?= ecom_chart($month, $by) ?>

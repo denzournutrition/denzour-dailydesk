@@ -98,6 +98,23 @@ layout_head('Sales overview');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Sales after ad spend</span><span class="kpi__ic"><?= icon('bag') ?></span></div><strong class="kpi__v"><?= h(inr_short($net)) ?></strong><span class="kpi__s">Online sales − ad spend, before product cost</span></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l"><?= $isM ? 'Month-end at this pace' : 'Average a day' ?></span><span class="kpi__ic"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($isM ? $projS : $perDay)) ?></strong><span class="kpi__s"><?= $isM ? h(inr_short($perDay)) . ' sales and ' . h(inr_short($spDay)) . ' spend a day · spend ' . h(inr_short($projSp)) : h(inr_short($spDay)) . ' spend a day over ' . (int)$elapsed . ' day' . ($elapsed > 1 ? 's' : '') ?></span></div>
 </div>
+<?php
+$dAsc = $daily; ksort($dAsc); $dl2 = array_map(fn($d) => date('j M', strtotime($d)), array_keys($dAsc));
+$byP = array_values(array_filter($cur['rows'], fn($r) => ($r['in_total'] ?? true) !== false && $r['sales'] > 0)); usort($byP, fn($a, $b) => $b['sales'] <=> $a['sales']);
+$top = array_slice($byP, 0, 7); $restS = array_sum(array_column(array_slice($byP, 7), 'sales')); $parts = array_map(fn($r) => [$r['label'], (float)$r['sales']], $top); if ($restS > 0) { $parts[] = ['Others', $restS]; }
+$inrf = fn($v) => inr((float)$v);
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Sales by day</h2><span class="muted tiny"><?= h($P['label']) ?></span></div>
+    <?= ch_combo($dl2, [['name' => 'Online', 'values' => array_map(fn($v) => round($v['online']), array_values($dAsc)), 'color' => CH_PAL[0]]], [['name' => 'Offline', 'values' => array_map(fn($v) => round($v['offline']), array_values($dAsc)), 'color' => CH_PAL[1]]], ['fmt' => $inrf, 'label' => 'Sales by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>Last six months</h2><span class="muted tiny">online and offline</span></div>
+    <?= ch_combo(array_map(fn($t) => date('M', strtotime($t['m'] . '-01')), $trend), [['name' => 'Online', 'values' => array_map(fn($t) => round($t['on']), $trend), 'color' => CH_PAL[0]]], [['name' => 'Offline', 'values' => array_map(fn($t) => round($t['off']), $trend), 'color' => CH_PAL[1]], ['name' => 'Ad spend', 'values' => array_map(fn($t) => round($t['spend']), $trend), 'color' => CH_PAL[5], 'dash' => true]], ['fmt' => $inrf, 'every' => 1, 'label' => 'Last six months']) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Sales by platform</h2></div><?= ch_donut($parts, inr_short((float)$tot['all']), 'all sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Online or offline</h2></div><?= ch_donut([['Online', (float)$tot['online'], CH_PAL[0]], ['Offline', (float)$tot['offline'], CH_PAL[1]]], inr_short((float)$tot['all']), 'all sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Ad return</h2><span class="muted tiny">online sales ÷ ad spend</span></div><div class="gauges" style="grid-template-columns:1fr"><?= ch_gauge($roas, 6, number_format($roas, 2) . 'x', 'ROAS (aim 3x+)', ['bad' => 1.5, 'warn' => 3]) ?></div></section>
+</div>
 <section class="card">
   <div class="card__h"><h2>Spend and return by line</h2><span class="muted tiny">Spend comes from the main sheet's monthly figure<?= $P['isMonth'] ? ($elapsed < $dim ? ' (month to date)' : '') : ', shared out by day' ?></span></div>
   <?php if ($best): ?><p class="muted" style="margin:0 0 12px">Best return: <strong><?= h($best['label']) ?></strong> at <?= h(ecom_roas((float)$best['sales'], (float)$best['spend'])) ?><?php if ($worst): ?> · weakest: <strong><?= h($worst['label']) ?></strong> at <?= h(ecom_roas((float)$worst['sales'], (float)$worst['spend'])) ?><?php endif; ?>.</p><?php endif; ?>

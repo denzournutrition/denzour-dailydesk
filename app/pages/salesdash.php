@@ -102,9 +102,9 @@ layout_head('Inside Sales');
     </section>
   </div>
   <div class="dash__col">
-    <section class="card" aria-label="Sales by source"><div class="card__h"><h2>Sales by source</h2></div><?= s_hbars($stats['source']) ?></section>
-    <section class="card" aria-label="Coupon codes"><div class="card__h"><h2>Top coupon codes</h2><span class="muted tiny">By sales</span></div><?= s_hbars($stats['code']) ?></section>
-    <section class="card" aria-label="Payment mode"><div class="card__h"><h2>Payment mode</h2><span class="muted tiny">Orders</span></div><?= s_hbars($stats['pay'], 'orders') ?></section>
+    <section class="card" aria-label="Sales by source"><div class="card__h"><h2>Sales by source</h2></div><?= ch_rows($stats['source'], 'sales', 'sales') ?></section>
+    <section class="card" aria-label="Coupon codes"><div class="card__h"><h2>Top coupon codes</h2><span class="muted tiny">By sales</span></div><?= ch_rows($stats['code'], 'sales', 'sales') ?></section>
+    <section class="card" aria-label="Payment mode"><div class="card__h"><h2>Payment mode</h2><span class="muted tiny">Orders</span></div><?= ch_rows($stats['pay'], 'orders', 'orders', false) ?></section>
   </div>
 </div>
 <?php endif; ?>

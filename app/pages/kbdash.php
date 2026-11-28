@@ -56,6 +56,29 @@ layout_head('Order desk');
   <?= $kpi($isCur ? 'Pace per day' : 'Average per day', number_format($perDay, 1), $isCur ? 'month-end estimate about ' . (int)round($perDay * $dim) . ' orders' : 'orders a day', 'trend') ?>
 </div>
 
+<?php
+$dd = []; foreach ($q("SELECT day, COUNT(*) n, SUM(CASE WHEN sc != 'can' THEN amt ELSE 0 END) v, SUM(sc = 'rto') rto FROM kb_conf WHERE ym = ? AND day > 0 GROUP BY day", [$ym]) as $r) { $dd[(int)$r['day']] = $r; }
+$cl = []; $co = []; $cv = []; $cr = []; $ma = [];
+for ($d = 1; $d <= $upto; $d++) { $cl[] = (string)$d; $co[] = (int)($dd[$d]['n'] ?? 0); $cv[] = round((float)($dd[$d]['v'] ?? 0)); $cr[] = (int)($dd[$d]['rto'] ?? 0); }
+foreach ($co as $i => $_) { $w = array_slice($co, max(0, $i - 6), min(7, $i + 1)); $ma[] = round(array_sum($w) / count($w), 1); }
+$nf = fn($v) => number_format((float)$v, $v == floor($v) ? 0 : 1);
+$closedC = $M['del'] + $M['rto'];
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Orders by day</h2><span class="muted tiny">bars are the day, the line is the 7-day average</span></div>
+    <?= ch_combo($cl, [['name' => 'Orders', 'values' => $co, 'color' => CH_PAL[0]]], [['name' => '7-day average', 'values' => $ma, 'color' => CH_PAL[1]]], ['fmt' => $nf, 'label' => 'Orders by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>Order value by day</h2><span class="muted tiny">cancelled orders left out</span></div>
+    <?= ch_combo($cl, [], [['name' => 'Order value', 'values' => $cv, 'color' => CH_PAL[2], 'area' => true]], ['fmt' => fn($v) => inr((float)$v), 'label' => 'Order value by day']) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Order status</h2></div><?= ch_donut([['Delivered', $M['del'], CH_PAL[0]], ['In transit', $M['tra'], CH_PAL[2]], ['RTO', $M['rto'], CH_PAL[5]], ['Cancelled', $M['can'], CH_PAL[1]], ['Other', $M['oth'], CH_PAL[7]]], (string)(int)$M['n'], 'orders') ?></section>
+  <section class="card"><div class="card__h"><h2>Health check</h2><span class="muted tiny">delivered orders and RTO only</span></div>
+    <div class="gauges" style="grid-template-columns:repeat(2,1fr)">
+      <?= ch_gauge($closedC > 0 ? $M['del'] / $closedC * 100 : 0, 100, $pct($M['del'], $closedC) . '%', 'Delivered (aim 90%+)', ['bad' => 80, 'warn' => 90]) ?>
+      <?= ch_gauge($pct($M['can'], $M['n']), 20, $pct($M['can'], $M['n']) . '%', 'Cancelled (keep under 5%)', ['invert' => true, 'warn' => 5, 'bad' => 10]) ?>
+    </div></section>
+</div>
+
 <section class="card"><div class="card__h"><h2>Day by day</h2><span class="muted tiny">orders she confirmed each day</span></div>
   <?php $days = []; foreach ($q("SELECT day, COUNT(*) n, SUM(CASE WHEN sc != 'can' THEN amt ELSE 0 END) v, SUM(sc = 'rto') rto FROM kb_conf WHERE ym = ? AND day > 0 GROUP BY day", [$ym]) as $r) { $days[(int)$r['day']] = $r; }
         $mx = max(1, max(array_merge([1], array_map(fn($r) => (int)$r['n'], $days)))); ?>
@@ -67,14 +90,12 @@ layout_head('Order desk');
 <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
 <?php
 $mix = function (string $title, string $sql) use ($q, $ym, $pct, $M) {
-    $rows = $q($sql, [$ym]); $mx = max(1, max(array_merge([1], array_map(fn($r) => (int)$r['n'], $rows))));
-    echo '<section class="card"><div class="card__h"><h2>' . h($title) . '</h2></div><div class="hbars">';
-    foreach ($rows as $r) { echo '<div class="hbar hbar--w"><span class="hbar__l">' . h($r['k'] !== '' ? $r['k'] : 'Not filled') . '</span><span class="hbar__t"><i style="width:' . round($r['n'] / $mx * 100) . '%"></i></span><span class="hbar__v">' . (int)$r['n'] . ' · ' . $pct((float)$r['n'], (float)$M['n']) . '%</span></div>'; }
-    echo '</div></section>';
+    $rows = $q($sql, [$ym]); $parts = array_map(fn($r) => [$r['k'] !== '' ? $r['k'] : 'Not filled', (int)$r['n']], array_slice($rows, 0, 7));
+    echo '<section class="card"><div class="card__h"><h2>' . h($title) . '</h2></div>' . ch_donut($parts, (string)(int)$M['n'], 'orders') . '</section>';
 };
 $mix('Payment type', "SELECT pay k, COUNT(*) n FROM kb_conf WHERE ym = ? GROUP BY pay ORDER BY n DESC");
 $mix('Courier', "SELECT courier k, COUNT(*) n FROM kb_conf WHERE ym = ? GROUP BY courier ORDER BY n DESC");
-$mix('Order status', "SELECT status k, COUNT(*) n FROM kb_conf WHERE ym = ? GROUP BY status ORDER BY n DESC");
+$mix('Status as written in the sheet', "SELECT status k, COUNT(*) n FROM kb_conf WHERE ym = ? GROUP BY status ORDER BY n DESC");
 ?></div>
 
 <?php $att = $q("SELECT * FROM kb_conf WHERE ym = ? AND (sc = 'rto' OR (sc IN ('tra','ofd') AND day > 0 AND day <= ?)) ORDER BY sc = 'rto' DESC, day, oid", [$ym, max(0, (int)substr($today, 8, 2) - 7)]);

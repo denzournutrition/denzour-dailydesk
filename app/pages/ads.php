@@ -42,6 +42,20 @@ layout_head('Ads and creatives');
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">ROAS</span></div><strong class="kpi__v"><?= h($roas($sales, $spend)) ?></strong></div>
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Purchases</span></div><strong class="kpi__v"><?= number_format($pur) ?></strong><span class="kpi__s"><?= $pur > 0 ? 'Cost each ' . h(inr($spend / $pur)) : '' ?></span></div>
 </div>
+<?php
+$al = []; $as = []; $ar = []; $arr = [];
+foreach ($d['days'] as $r) { $al[] = date('j M', strtotime($r['day'])); $as[] = round((float)$r['spend']); $ar[] = round((float)$r['sales']); $arr[] = $r['spend'] > 0 ? round($r['sales'] / $r['spend'], 2) : null; }
+$inrf = fn($v) => inr((float)$v);
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Spend and sales by day</h2></div><?= ch_combo($al, [['name' => 'Ad spend', 'values' => $as, 'color' => CH_PAL[1]]], [['name' => 'Sales credited to ads', 'values' => $ar, 'color' => CH_PAL[0], 'area' => true]], ['fmt' => $inrf, 'label' => 'Spend and sales by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>ROAS by day</h2><span class="muted tiny">under the 1x line the ad loses money</span></div><?= ch_combo($al, [], [['name' => 'ROAS', 'values' => $arr, 'color' => CH_PAL[2], 'area' => true]], ['fmt' => fn($v) => number_format((float)$v, 2) . 'x', 'axis' => fn($v) => number_format($v, 1) . 'x', 'ref' => [1 => '1x break-even'], 'label' => 'ROAS by day']) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Spend by platform</h2></div><?= ch_donut(array_map(fn($r) => [$r['platform'], (float)$r['spend']], $d['by']), inr_short($spend), 'spend', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Sales by platform</h2></div><?= ch_donut(array_map(fn($r) => [$r['platform'], (float)$r['sales']], $d['by']), inr_short($sales), 'sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Top campaigns by spend</h2></div><?= ch_donut(array_map(fn($r) => [$r['campaign'], (float)$r['spend']], array_slice($d['camp'], 0, 6)), '', '', $inrf) ?></section>
+</div>
 <section class="card"><div class="card__h"><h2>By platform</h2></div><div class="tblwrap"><table class="tbl"><thead><tr><th>Platform</th><th class="r">Spend</th><th class="r">Sales</th><th class="r">ROAS</th><th class="r">Purchases</th><th class="r">Cost each</th><th class="r hm">Clicks</th><th class="r hm">Cost per click</th></tr></thead><tbody>
 <?php foreach ($d['by'] as $r): ?><tr><td><strong><?= h($r['platform']) ?></strong></td><td class="r"><?= h(inr($r['spend'])) ?></td><td class="r"><?= h(inr($r['sales'])) ?></td><td class="r"><?= h($roas($r['sales'], $r['spend'])) ?></td><td class="r"><?= number_format($r['pur']) ?></td><td class="r"><?= $r['pur'] > 0 ? h(inr($r['spend'] / $r['pur'])) : '–' ?></td><td class="r hm"><?= number_format($r['clk']) ?></td><td class="r hm"><?= $r['clk'] > 0 ? h(inr($r['spend'] / $r['clk'])) : '–' ?></td></tr><?php endforeach; ?>
 </tbody></table></div></section>

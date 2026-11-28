@@ -67,6 +67,23 @@ $estComm = round($sales * 0.95 * 0.10);
   <?= $kpi('Spend and ROAS', $spend > 0 ? h(inr_short($spend)) . ' · ' . round($spendSales / $spend, 1) . 'x' : '–', $spend > 0 ? 'sales ÷ spend, from the performance tab' : 'no spend entered in the performance tab', 'trend') ?>
 </div>
 
+<?php
+$idd = []; foreach ($q("SELECT day, SUM(amount) s, COUNT(*) n FROM inf_order WHERE kind='sale' AND $mw AND day != '' GROUP BY day ORDER BY day") as $r) { $idd[$r['day']] = $r; }
+$inrf = fn($v) => inr((float)$v);
+$tp = $q("SELECT code, SUM(amount) s FROM inf_order WHERE kind='sale' AND $mw GROUP BY code ORDER BY s DESC"); $tpa = array_map(fn($t) => [$dn($t['code']), (float)$t['s']], array_slice($tp, 0, 6)); $rest = array_sum(array_map(fn($t) => (float)$t['s'], array_slice($tp, 6))); if ($rest > 0) { $tpa[] = ['Other codes', $rest]; }
+$mm2 = array_reverse($q("SELECT month, SUM(amount) s, COUNT(*) n FROM inf_order WHERE kind='sale' GROUP BY month ORDER BY month DESC LIMIT 12"));
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Sales by day</h2><span class="muted tiny"><?= h($mLabel) ?></span></div>
+    <?= ch_combo(array_map(fn($d) => date('j M', strtotime($d)), array_keys($idd)), [['name' => 'Sales', 'values' => array_map(fn($r) => round($r['s']), array_values($idd)), 'color' => CH_PAL[0]]], [], ['fmt' => $inrf, 'label' => 'Influencer sales by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>Month by month</h2><span class="muted tiny">influencer sales</span></div>
+    <?= ch_combo(array_map(fn($r) => date('M', strtotime($r['month'] . '-01')), $mm2), [['name' => 'Sales', 'values' => array_map(fn($r) => round($r['s']), $mm2), 'color' => CH_PAL[2]]], [], ['fmt' => $inrf, 'every' => 1, 'label' => 'Influencer sales by month']) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Who brings the sales</h2></div><?= ch_donut($tpa, inr_short($sales), 'sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Order outcomes</h2></div><?= ch_donut([['Paid and kept', (int)$S['n'], CH_PAL[0]], ['Pending payment', (int)$P['n'], CH_PAL[1]], ['Lost (RTO, cancelled)', (int)$L['n'], CH_PAL[5]]], (string)$allOrd, 'orders') ?></section>
+</div>
+
 <section class="card"><div class="card__h"><h2>Top influencers · <?= h($mLabel) ?></h2><a class="muted tiny" href="<?= h(url('infdash', ['t' => 'codes'] + $keep)) ?>">See all</a></div>
   <?php $top = $q("SELECT code, SUM(amount) s, COUNT(*) n FROM inf_order WHERE kind='sale' AND $mw GROUP BY code ORDER BY s DESC LIMIT 12"); $mx = max(1.0, (float)($top[0]['s'] ?? 1)); ?>
   <div class="hbars"><?php foreach ($top as $t): ?><div class="hbar hbar--w"><span class="hbar__l"><?= h($dn($t['code'])) ?></span><span class="hbar__t"><i style="width:<?= round($t['s'] / $mx * 100) ?>%"></i></span><span class="hbar__v"><?= h(inr_short((float)$t['s'])) ?></span></div><?php endforeach; ?></div>

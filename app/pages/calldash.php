@@ -68,6 +68,23 @@ $queue = (int)$q("SELECT COUNT(*) n FROM ($cur) c WHERE $pw AND c.cat = 'todo'")
   <?= $kpi('Still to call', (string)$queue, 'numbers in the sheet with no call yet', 'users') ?>
 </div>
 
+<?php
+$from30 = date('Y-m-d', strtotime($today . ' -29 days'));
+$cd = []; foreach ($q("SELECT day, COUNT(*) n, SUM(cat IN ('deal','hot','connected','callback','notint','wrong')) p, SUM(cat = 'deal') o FROM ct_call WHERE $pwp AND cat != 'todo' AND day >= ? AND day <= ? GROUP BY day ORDER BY day", [$from30, $today]) as $r) { $cd[$r['day']] = $r; }
+$cdl = []; $cdn = []; $cdp = []; for ($d = $from30; $d <= $today; $d = add_days($d, 1)) { $cdl[] = date('j M', strtotime($d)); $cdn[] = (int)($cd[$d]['n'] ?? 0); $cdp[] = (int)($cd[$d]['p'] ?? 0); }
+$oc = []; foreach ($C as $k => $n) { if ($k !== 'todo' && $n > 0) { $oc[] = [$CAT[$k] ?? $k, $n, ['deal' => CH_PAL[0], 'hot' => CH_PAL[4], 'connected' => CH_PAL[2], 'callback' => CH_PAL[1], 'noanswer' => '#B9A27A', 'off' => '#9AA5A0', 'notint' => CH_PAL[5], 'wrong' => '#7A6F66'][$k] ?? CH_PAL[7]]; } }
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Calls by day</h2><span class="muted tiny">last 30 days · bars are calls, line is picked up</span></div>
+    <?= ch_combo($cdl, [['name' => 'Calls made', 'values' => $cdn, 'color' => CH_PAL[0]]], [['name' => 'Picked up', 'values' => $cdp, 'color' => CH_PAL[1]]], ['fmt' => fn($v) => number_format((float)$v), 'label' => 'Calls by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>How the calls ended</h2></div><?= ch_donut($oc, (string)$dialled, 'calls') ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Pick-up rate</h2></div><div class="gauges" style="grid-template-columns:1fr"><?= ch_gauge($dialled > 0 ? $answered / $dialled * 100 : 0, 100, $pct($answered, $dialled) . '%', 'of calls were picked up (aim 40%+)', ['bad' => 25, 'warn' => 40]) ?></div></section>
+  <section class="card"><div class="card__h"><h2>Interest rate</h2></div><div class="gauges" style="grid-template-columns:1fr"><?= ch_gauge($answered > 0 ? $positive / $answered * 100 : 0, 100, $pct($positive, $answered) . '%', 'of picked-up calls showed interest', ['bad' => 15, 'warn' => 30]) ?></div></section>
+  <section class="card"><div class="card__h"><h2>Order rate</h2></div><div class="gauges" style="grid-template-columns:1fr"><?= ch_gauge($answered > 0 ? ($C['deal'] ?? 0) / $answered * 100 : 0, 30, $pct((float)($C['deal'] ?? 0), $answered) . '%', 'of picked-up calls ended in an order', ['bad' => 3, 'warn' => 8]) ?></div></section>
+</div>
+
 <?php if ($who === 'all'): ?>
 <section class="card"><div class="card__h"><h2>Team</h2><span class="muted tiny">every call in the sheets</span></div>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Caller</th><th class="r">Calls</th><th class="r">Picked up</th><th class="r">Pick-up %</th><th class="r">Interested</th><th class="r">Orders</th><th class="r">No answer</th><th class="r">Call back</th><th class="r">Still to call</th><th class="r">Reminders</th></tr></thead><tbody>

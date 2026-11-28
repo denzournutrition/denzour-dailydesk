@@ -53,6 +53,47 @@ $sgn = fn($v) => ($v >= 0 ? '+' : '') . $v . '%';
   <?= $kpi('Sales pace', inr_short($paceSales), 'month-end Shopify estimate', 'clock') ?>
 </div>
 
+<?php
+$asc = array_reverse($q('SELECT * FROM perf_daily WHERE ym = ? ORDER BY day DESC', [$ym]));
+$lab = array_map(fn($r) => (string)$r['day'], $asc);
+$spd = array_map(fn($r) => round($r['m_spend'] + $r['g_spend']), $asc);
+$ads = array_map(fn($r) => round($r['m_sales'] + $r['g_sales']), $asc);
+$shp = array_map(fn($r) => round($r['shop']), $asc);
+$mroS = array_map(fn($r) => $r['m_spend'] > 0 ? round($r['m_sales'] / $r['m_spend'], 2) : null, $asc);
+$merS = array_map(fn($r) => ($r['m_spend'] + $r['g_spend']) > 0 ? round($r['shop'] / ($r['m_spend'] + $r['g_spend']), 2) : null, $asc);
+$inrf = fn($v) => inr((float)$v); $xf = fn($v) => number_format((float)$v, 2) . 'x';
+$wd = []; foreach ($asc as $r) { $w = (int)date('N', strtotime($ym . '-' . sprintf('%02d', $r['day']))) - 1; $wd[$w]['n'] = ($wd[$w]['n'] ?? 0) + 1; $wd[$w]['shop'] = ($wd[$w]['shop'] ?? 0) + $r['shop']; $wd[$w]['sp'] = ($wd[$w]['sp'] ?? 0) + $r['m_spend'] + $r['g_spend']; $wd[$w]['ms'] = ($wd[$w]['ms'] ?? 0) + $r['m_sales']; }
+$wl = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; $wb = []; $wsp = [];
+foreach ($wl as $i => $_) { $wb[] = isset($wd[$i]) ? round($wd[$i]['shop'] / $wd[$i]['n']) : 0; $wsp[] = isset($wd[$i]) ? round($wd[$i]['sp'] / $wd[$i]['n']) : 0; }
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Spend and sales by day</h2><span class="muted tiny">hover a day for the figures</span></div>
+    <?= ch_combo($lab, [['name' => 'Ad spend', 'values' => $spd, 'color' => CH_PAL[1]]], [['name' => 'Sales credited to ads', 'values' => $ads, 'color' => CH_PAL[0], 'area' => true], ['name' => 'Shopify sales', 'values' => $shp, 'color' => CH_PAL[2], 'dash' => true]], ['fmt' => $inrf, 'label' => 'Spend and sales by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>ROAS and MER by day</h2><span class="muted tiny">below the 1x line you lose money on the ad</span></div>
+    <?= ch_combo($lab, [], [['name' => 'Meta ROAS', 'values' => $mroS, 'color' => CH_PAL[0], 'area' => true], ['name' => 'MER (Shopify ÷ spend)', 'values' => $merS, 'color' => CH_PAL[2]]], ['fmt' => $xf, 'axis' => fn($v) => number_format($v, 1) . 'x', 'ref' => [1 => '1x break-even', 2 => '2x'], 'label' => 'ROAS and MER by day']) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Where the spend went</h2></div><?= ch_donut([['Meta', $M['ms'], CH_PAL[2]], ['Google', $M['gs'], CH_PAL[1]]], inr_short($spend), 'ad spend', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>Where the sales came from</h2></div><?= ch_donut([['Meta ads', $M['mr'], CH_PAL[2]], ['Google ads', $M['gr'], CH_PAL[1]], ['Other sales', max(0, $M['shop'] - $adSales), CH_PAL[0]]], inr_short($M['shop']), 'Shopify sales', $inrf) ?></section>
+  <section class="card" style="grid-column:1/-1"><div class="card__h"><h2>Health check</h2><span class="muted tiny">month so far</span></div>
+    <div class="gauges">
+      <?= ch_gauge($roas, 4, $x($roas), 'Ad ROAS (target 2x)', ['bad' => 1, 'warn' => 2]) ?>
+      <?= ch_gauge($mer, 6, $x($mer), 'MER (target 3x)', ['bad' => 2, 'warn' => 3]) ?>
+      <?= ch_gauge($M['ses'] > 0 ? $M['ord'] / $M['ses'] * 100 : 0, 2, ($M['ses'] > 0 ? number_format($M['ord'] / $M['ses'] * 100, 2) : '0') . '%', 'Store conversion (target 1%)', ['bad' => .5, 'warn' => 1]) ?>
+    </div></section>
+</div>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Which weekday sells most</h2><span class="muted tiny">average per day</span></div>
+    <?= ch_combo($wl, [['name' => 'Shopify sales', 'values' => $wb, 'color' => CH_PAL[0]]], [['name' => 'Ad spend', 'values' => $wsp, 'color' => CH_PAL[1]]], ['fmt' => $inrf, 'h' => 200, 'every' => 1, 'label' => 'Average sales and spend by weekday']) ?></section>
+  <?php if (count($months) > 1): $mAsc = array_reverse($months); $mt = array_map($tot, $mAsc); ?>
+  <section class="card"><div class="card__h"><h2>Month by month</h2></div>
+    <?= ch_combo(array_map(fn($m) => date('M', strtotime($m . '-01')), $mAsc), [['name' => 'Ad spend', 'values' => array_map(fn($t) => round($t['ms'] + $t['gs']), $mt), 'color' => CH_PAL[1]]], [['name' => 'Shopify sales', 'values' => array_map(fn($t) => round($t['shop']), $mt), 'color' => CH_PAL[0], 'area' => true]], ['fmt' => $inrf, 'h' => 200, 'every' => 1, 'label' => 'Spend and sales by month']) ?></section>
+  <?php else: ?>
+  <section class="card"><div class="card__h"><h2>Orders by day</h2><span class="muted tiny">Shopify orders, with the ones Meta got credit for</span></div>
+    <?= ch_combo($lab, [['name' => 'Shopify orders', 'values' => array_map(fn($r) => (int)$r['orders'], $asc), 'color' => CH_PAL[0]]], [['name' => 'Meta orders', 'values' => array_map(fn($r) => (int)$r['m_orders'], $asc), 'color' => CH_PAL[2]]], ['fmt' => fn($v) => number_format((float)$v), 'h' => 200, 'label' => 'Orders by day']) ?></section>
+  <?php endif; ?>
+</div>
+
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
 <?php foreach ([['Meta', 'ms', 'mr', 'mi', 'mv', 'mo'], ['Google', 'gs', 'gr', 'gi', 'gv', 'go']] as [$nm, $ks, $kr, $ki, $kv, $ko]):
   $s = $M[$ks]; $r = $M[$kr]; $im = $M[$ki]; $vi = $M[$kv]; $od = $M[$ko]; ?>

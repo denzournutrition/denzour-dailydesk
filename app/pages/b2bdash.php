@@ -61,6 +61,23 @@ layout_head('Bhanu credit offline');
   <?= $kpi('New prospects', (string)($meta['prospects'] ?? 0), ($meta['hot'] ?? 0) . ' hot, ' . ($meta['samples'] ?? 0) . ' samples to send', 'users') ?>
 </div>
 
+<?php
+$inrf = fn($v) => inr((float)$v);
+$bo = []; foreach ($q('SELECT month m, SUM(amount) s FROM b2b_order GROUP BY month ORDER BY month DESC LIMIT 12') as $r) { $bo[$r['m']] = (float)$r['s']; }
+$bc = []; foreach ($q("SELECT substr(day,1,7) m, SUM(amount) s FROM b2b_coll WHERE day != '' GROUP BY substr(day,1,7) ORDER BY 1 DESC LIMIT 12") as $r) { $bc[$r['m']] = (float)$r['s']; }
+$bm = array_unique(array_merge(array_keys($bo), array_keys($bc))); sort($bm); $bm = array_slice($bm, -12);
+$od = array_slice(array_values(array_filter($dist, fn($d) => $d['outstanding'] > 0)), 0, 6); $odp = array_map(fn($d) => [$d['name'], (float)$d['outstanding']], $od); $restO = $totOut - array_sum(array_column($odp, 1)); if ($restO > 0.5) { $odp[] = ['Others', $restO]; }
+$stat = []; foreach ($dist as $d) { $k = $d['status'] !== '' ? $d['status'] : 'No status'; $stat[$k] = ($stat[$k] ?? 0) + 1; } arsort($stat);
+?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Orders and money collected</h2><span class="muted tiny">by month</span></div>
+    <?= ch_combo(array_map(fn($x) => date('M', strtotime($x . '-01')), $bm), [['name' => 'Orders', 'values' => array_map(fn($x) => round($bo[$x] ?? 0), $bm), 'color' => CH_PAL[0]]], [['name' => 'Collected', 'values' => array_map(fn($x) => round($bc[$x] ?? 0), $bm), 'color' => CH_PAL[1]]], ['fmt' => $inrf, 'every' => 1, 'label' => 'Orders and collections by month']) ?></section>
+  <section class="card"><div class="card__h"><h2>Who owes the most</h2></div><?= ch_donut($odp, inr_short((float)$totOut), 'outstanding', $inrf) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Distributors by status</h2></div><?= ch_donut(array_map(fn($k, $n) => [(string)$k, (int)$n], array_keys($stat), array_values($stat)), (string)count($dist), 'distributors') ?></section>
+</div>
+
 <section class="card"><div class="card__h"><h2>Month by month</h2></div>
   <div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="r">Orders</th><th class="r">Collected</th><th class="r">Collected vs orders</th><th class="r">Distributors ordered</th><th class="r">New distributors</th></tr></thead><tbody>
   <?php foreach ($months as $mo):

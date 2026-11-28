@@ -98,6 +98,20 @@ layout_head($title . ' dashboard');
 <?php endif; ?>
 </div>
 
+<?php if ($rows && ($tabNow === 'overview' || !$hasB2b || $tabNow === 'invoices')):
+  $dA = $daily; ksort($dA); $inrf = fn($v) => inr((float)$v);
+  $agC = [CH_PAL[0], CH_PAL[4], CH_PAL[1], CH_PAL[5], '#7A1B12']; $agParts = []; $ai = 0; foreach ($aging as $k => $g) { $agParts[] = [$k, (float)$g[2], $agC[$ai++ % 5]]; } ?>
+<div class="chgrid chgrid--2">
+  <section class="card"><div class="card__h"><h2>Sales and money received by day</h2><span class="muted tiny">invoice value against advance collected</span></div>
+    <?= ch_combo(array_map(fn($d) => date('j M', strtotime($d)), array_keys($dA)), [['name' => 'Invoice value', 'values' => array_map(fn($v) => round($v['t']), array_values($dA)), 'color' => CH_PAL[0]]], [['name' => 'Advance received', 'values' => array_map(fn($v) => round($v['a']), array_values($dA)), 'color' => CH_PAL[1]]], ['fmt' => $inrf, 'label' => 'Offline sales by day']) ?></section>
+  <section class="card"><div class="card__h"><h2>Money still to collect</h2><span class="muted tiny">by how old the invoice is</span></div><?= ch_donut($agParts, inr_short((float)$bal), 'outstanding', $inrf) ?></section>
+</div>
+<div class="chgrid">
+  <section class="card"><div class="card__h"><h2>Sales by seller</h2></div><?= ch_donut(array_map(fn($x) => [$x['seller'] !== '' ? $x['seller'] : 'No seller', (float)$x['sales']], $sellers), inr_short((float)$sales), 'sales', $inrf) ?></section>
+  <section class="card"><div class="card__h"><h2>By order status</h2></div><?= ch_donut(array_map(fn($k, $x) => [(string)$k, (float)$x['t']], array_keys($status), array_values($status)), inr_short((float)$sales), 'sales', $inrf) ?></section>
+</div>
+<?php endif; ?>
+
 <?php if (!$bh && $P['isMonth']):
   $tgtTotal = (float)setting('off_target_total', '2500000'); $tgtEach = (float)setting('off_target_each', '500000');
   $mStart = $P['month'] . '-01'; $dim = (int)date('t', strtotime($mStart)); $isCur = $P['month'] === substr($today, 0, 7);
