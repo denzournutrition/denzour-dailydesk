@@ -34,6 +34,7 @@ layout_head('Influencers');
 <?php layout_foot(); return; endif; ?>
 <div class="pagehead__r" style="margin:-4px 0 14px;flex-wrap:wrap"><?php foreach ($tabs as $tk => $tl): ?><a class="btn btn--sm <?= $tk === $tabNow ? '' : 'btn--ghost' ?>" href="<?= h(url('infdash', ['t' => $tk] + $keep)) ?>"><?= h($tl) ?></a> <?php endforeach; ?></div>
 
+<?php track_person_panel(isset($m) ? (string)$m : '', 'sourabh', 'Sourabh · Influencers'); ?>
 <?php
 $S = $one("SELECT COALESCE(SUM(amount),0) s, COUNT(*) n, COUNT(DISTINCT code) c FROM inf_order WHERE kind='sale' AND $mw");
 $L = $one("SELECT COUNT(*) n, COALESCE(SUM(value),0) v FROM inf_order WHERE kind='lost' AND $mw");

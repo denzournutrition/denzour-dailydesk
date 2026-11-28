@@ -28,6 +28,7 @@ layout_head('Inside Sales');
   </div>
 </div>
 <?php s_month_filter('salesdash', $month); ?>
+<?php track_person_panel($month, 'bhanu', 'Bhanu · Inside Sales'); ?>
 
 <section class="card tgt" aria-label="Team target">
   <?php if ($target > 0): ?>

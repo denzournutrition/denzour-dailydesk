@@ -48,6 +48,7 @@ layout_head('E-commerce');
   <div class="pagehead__r"><a class="btn btn--ghost" href="<?= h(url('exports')) ?>"><?= icon('download') ?>Download data</a></div>
 </div>
 <?php s_month_filter('ecomdash', $month); ?>
+<?php track_person_panel($month, 'ritik', 'Ritik · E-commerce'); ?>
 
 <div class="kpis kpis--4">
   <div class="kpi"><div class="kpi__top"><span class="kpi__l">Sales</span><span class="kpi__ic kpi__ic--ok"><?= icon('trend') ?></span></div><strong class="kpi__v"><?= h(inr_short($tot['sales'])) ?></strong><span class="kpi__s"><?= h(inr($tot['sales'])) ?></span></div>

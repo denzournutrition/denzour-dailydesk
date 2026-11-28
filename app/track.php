@@ -603,3 +603,24 @@ function track_people_between(string $from, string $to): array
     }
     return array_values($out);
 }
+
+/** One person's line from the main sale sheet (target, achieved, pace, daily bars) for their own dashboard. $needle = start of the name key, e.g. 'bhanu'. */
+function track_person_panel(string $month, string $needle, string $heading): void
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $month)) { return; }
+    $d = track_load($month); $e = null;
+    foreach ($d['ents'] as $x) { if (str_starts_with(track_key(track_alias($x['name'])), $needle) || str_starts_with(track_key($x['name']), $needle)) { $e = $x; break; } }
+    if (!$e) { return; }
+    $e['dim'] = $d['dim'];
+    $spend = (float)($e['spend'] ?? 0);
+    ?>
+<div class="chgrid chgrid--2" style="align-items:start">
+  <div><?php track_hero($e, $d, $heading); ?></div>
+  <section class="card">
+    <div class="card__h"><h2>Every day against target</h2><span class="muted tiny"><?= h(track_asof_text($d)) ?><?= $spend > 0 ? ' · ad spend ' . h(inr_short($spend)) : '' ?></span></div>
+    <?= track_chart($e) ?>
+    <p class="muted tiny" style="margin:6px 0 0">Green bar: target met. Amber: 70% or more. Red: below 70%. Dashed line is the daily target. Figures come from the main sale sheet.</p>
+  </section>
+</div>
+<?php
+}
